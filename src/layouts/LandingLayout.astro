@@ -1,5 +1,7 @@
 ---
 import '../styles/globals.css';
+import FloatingWhatsApp from '../components/FloatingWhatsApp.astro';
+import { PRODUCT } from '../config/product';
 
 interface Props {
   title?: string;
@@ -7,8 +9,8 @@ interface Props {
 }
 
 const {
-  title = 'Kit Quarto de Bebê — Projeto técnico de arquiteta por R$147',
-  description = 'Planta técnica, renders ultrarrealistas e lista completa de compras para montar o quarto do seu bebê com segurança e estilo.',
+  title       = PRODUCT.name,
+  description = PRODUCT.description,
 } = Astro.props;
 ---
 
@@ -34,5 +36,6 @@ const {
   </head>
   <body style="background: var(--qb-dark); color: var(--qb-text-light); font-family: var(--qb-sans);">
     <slot />
+    <FloatingWhatsApp />
   </body>
 </html>

@@ -59,6 +59,19 @@ export const PRODUCT = {
     /** Página raiz da área do cliente. */
     appHome: '/app',
   },
+
+  // ── WhatsApp ──────────────────────────────────────────────────
+  // O número é lido de PUBLIC_WHATSAPP_NUMBER no .env (veja .env.example).
+  whatsapp: {
+    /**
+     * Mensagem pré-preenchida quando o visitante clica no botão.
+     * Personalize para o contexto do seu produto.
+     */
+    prefilledMessage: 'Olá! Tenho uma dúvida sobre o produto.',
+
+    /** Posição do botão flutuante: 'right' (padrão) ou 'left'. */
+    position: 'right' as 'right' | 'left',
+  },
 } as const;
 
 export type ProductConfig = typeof PRODUCT;
