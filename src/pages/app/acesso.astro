@@ -1,0 +1,73 @@
+---
+/**
+ * app/acesso.astro — Página de entrega digital do produto.
+ *
+ * TODO: Implemente a área de entrega do seu produto aqui.
+ *
+ * Esta página é equivalente ao kit.astro do quarto-de-bebe-astro.
+ * O que mostrar aqui depende do formato do seu produto:
+ *
+ * ── PDFs / Arquivos ────────────────────────────────────────────────────────
+ *   - Use /api/assets/list para listar os arquivos do cliente
+ *   - Use /api/assets/sign para gerar URLs assinadas temporárias
+ *   - Use /api/watermark/generate + /api/watermark/sign para PDFs com marca d'água
+ *
+ * ── Vídeos / Cursos ────────────────────────────────────────────────────────
+ *   - Armazene vídeos em Supabase Storage (bucket protected-assets)
+ *   - Gere signed URLs com TTL curto para streaming
+ *
+ * ── Acesso externo (plataforma de cursos, Discord, etc.) ──────────────────
+ *   - Redirecione para o recurso externo após verificar o entitlement
+ *   - Confirme que o cliente tem entitlement ativo antes de dar o link
+ *
+ * Exemplo de referência: quarto-de-bebe-astro/src/pages/app/kit.astro
+ */
+
+export const prerender = false;
+
+import { createAdminClient } from '../../lib/supabase/admin';
+import { PRODUCT } from '../../config/product';
+
+const user  = Astro.locals.user!;
+const admin = createAdminClient();
+
+// Verifica entitlement ativo
+const { data: entitlement } = await admin
+  .from('entitlements')
+  .select('active')
+  .eq('customer_id', user.id)
+  .eq('product_code', PRODUCT.code)
+  .eq('active', true)
+  .maybeSingle();
+
+if (!entitlement?.active) {
+  return Astro.redirect('/app');
+}
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meu Produto</title>
+  </head>
+  <body style="margin:0;min-height:100vh;background:#1c2a3a;color:#f8fafc;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:2rem;">
+    <div style="max-width:560px;text-align:center;">
+      <h1 style="font-size:1.75rem;font-weight:700;margin-bottom:0.5rem;">Seu acesso está ativo ✓</h1>
+      <p style="color:#94a3b8;margin-bottom:2rem;">{user.email}</p>
+      <p style="color:#64748b;font-size:0.875rem;margin-bottom:2rem;">
+        Implemente a entrega do produto em
+        <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">src/pages/app/acesso.astro</code>.
+      </p>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+        <a href="/app" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;text-decoration:none;border-radius:8px;font-size:0.875rem;">
+          ← Voltar
+        </a>
+        <a href="/app/conta" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;text-decoration:none;border-radius:8px;font-size:0.875rem;">
+          Minha conta
+        </a>
+      </div>
+    </div>
+  </body>
+</html>

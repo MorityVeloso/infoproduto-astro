@@ -1,0 +1,430 @@
+---
+// src/pages/admin/customers.astro
+export const prerender = false;
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { requireAdmin } from '../../lib/require-admin';
+
+const result = await requireAdmin(Astro.request);
+if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
+const { profile } = result;
+---
+
+<AdminLayout title="Clientes — Admin" email={profile.email}>
+  <style>
+    .cust-wrap          { display: flex; gap: 1.5rem; align-items: flex-start; }
+    .cust-list          { flex: 1; min-width: 0; }
+    .cust-detail        { width: min(400px, 100%); flex-shrink: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 1.25rem; display: none; }
+    .cust-detail.open   { display: block; }
+    #list-container     { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    @media (max-width: 768px) {
+      .cust-wrap        { flex-direction: column; }
+      .cust-detail      { width: 100% !important; }
+    }
+    .filters            { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+    .filters input      { flex: 1; padding: 0.4rem 0.65rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 0.9rem; }
+    .filters button     { padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; font-size: 0.9rem; }
+    table               { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td              { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--color-border); }
+    th                  { font-weight: 600; color: var(--color-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:hover td         { background: var(--color-hover, #f9f9f9); cursor: pointer; }
+    tr.selected td      { background: var(--color-accent-light, #eef2ff); }
+    .badge              { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+    .badge.active       { background: rgba(34,197,94,0.15);  color: #4ade80; }
+    .badge.inactive     { background: rgba(239,68,68,0.15);  color: #f87171; }
+    .pagination         { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; align-items: center; }
+    .pagination button  { padding: 0.3rem 0.65rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; font-size: 0.85rem; }
+    .pagination button:disabled { opacity: 0.4; cursor: default; }
+    .detail-section     { margin-bottom: 1.25rem; }
+    .detail-section h4  { font-size: 0.8rem; font-weight: 700; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .kv                 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 0.5rem; font-size: 0.875rem; }
+    .kv .label          { color: var(--color-muted); }
+    .orders-mini        { font-size: 0.82rem; }
+    .orders-mini tr td  { padding: 0.3rem 0.45rem; }
+    .detail-actions     { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .detail-actions button { padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; font-size: 0.85rem; }
+    .msg                { padding: 0.5rem; border-radius: 6px; font-size: 0.85rem; display: none; }
+    .msg.ok             { background: rgba(34,197,94,0.12);  color: #4ade80; display: block; }
+    .msg.err            { background: rgba(239,68,68,0.12);  color: #f87171; display: block; }
+    .empty              { text-align: center; padding: 2rem; color: var(--color-muted); }
+  </style>
+
+  <h1 style="font-family: var(--font-serif); font-size: 1.75rem; font-weight: 400; margin-bottom: 1rem;">Clientes</h1>
+
+  <div class="cust-wrap">
+    <!-- Left: list -->
+    <div class="cust-list">
+      <div class="filters">
+        <input id="q-input" type="search" placeholder="Buscar por e-mail..." />
+        <button id="search-btn">Buscar</button>
+      </div>
+
+      <div id="list-container">
+        <table id="cust-table">
+          <thead>
+            <tr>
+              <th>E-mail</th>
+              <th>Pedidos</th>
+              <th>Último pago</th>
+              <th>Modelo / Tamanho</th>
+              <th>Acesso</th>
+            </tr>
+          </thead>
+          <tbody id="cust-tbody"></tbody>
+        </table>
+        <div id="empty-msg" class="empty" style="display:none">Nenhum cliente encontrado.</div>
+      </div>
+
+      <div class="pagination">
+        <button id="prev-btn" disabled>&#8249; Anterior</button>
+        <span id="page-info" style="font-size:0.85rem; color: var(--color-muted);">—</span>
+        <button id="next-btn" disabled>Próxima &#8250;</button>
+      </div>
+    </div>
+
+    <!-- Right: detail panel -->
+    <div class="cust-detail" id="detail-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <strong id="detail-email" style="font-size:0.95rem;"></strong>
+        <button id="close-detail-btn" style="background:none;border:none;cursor:pointer;font-size:1.2rem;">&#x2715;</button>
+      </div>
+
+      <div id="detail-msg" class="msg"></div>
+
+      <div class="detail-section">
+        <h4>Acesso</h4>
+        <div class="kv">
+          <span class="label">Status:</span>
+          <span id="ent-status">—</span>
+          <span class="label">Concedido em:</span>
+          <span id="ent-granted">—</span>
+          <span class="label">Revogado em:</span>
+          <span id="ent-revoked">—</span>
+        </div>
+        <div class="detail-actions" style="margin-top:0.75rem;">
+          <button id="toggle-ent-btn">Alternar acesso</button>
+          <button id="resend-btn">Reenviar link</button>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h4>Pedidos</h4>
+        <div style="overflow-x:auto;">
+          <table class="orders-mini">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Modelo</th>
+                <th>Tam.</th>
+                <th>Valor</th>
+                <th>PDF</th>
+              </tr>
+            </thead>
+            <tbody id="detail-orders-tbody"></tbody>
+          </table>
+          <div id="no-orders-msg" class="empty" style="display:none;padding:0.75rem;">Sem pedidos.</div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h4>Downloads (últimos 100)</h4>
+        <div id="downloads-list" style="font-size:0.82rem; max-height:200px; overflow-y:auto;"></div>
+        <div id="no-downloads-msg" style="font-size:0.82rem; color:var(--color-muted); display:none;">Nenhum download registrado.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const MODEL_LABELS = { safari: 'Safari', jardim: 'Jardim', amendoa: 'Amêndoa' };
+      const modelLabel = (m) => MODEL_LABELS[m] ?? m ?? '—';
+
+      const fmt = {
+        date: (s) => s ? new Date(s).toLocaleDateString('pt-BR') : '—',
+        money: (n) => n != null ? `R$ ${Number(n).toFixed(2).replace('.', ',')}` : '—',
+      };
+
+      let state = { page: 1, pageSize: 25, q: '', total: 0, selectedCustomer: null };
+
+      const qInput         = document.getElementById('q-input');
+      const searchBtn      = document.getElementById('search-btn');
+      const tbody          = document.getElementById('cust-tbody');
+      const emptyMsg       = document.getElementById('empty-msg');
+      const pageInfo       = document.getElementById('page-info');
+      const prevBtn        = document.getElementById('prev-btn');
+      const nextBtn        = document.getElementById('next-btn');
+      const detailPanel    = document.getElementById('detail-panel');
+      const detailEmail    = document.getElementById('detail-email');
+      const detailMsg      = document.getElementById('detail-msg');
+      const entStatus      = document.getElementById('ent-status');
+      const entGranted     = document.getElementById('ent-granted');
+      const entRevoked     = document.getElementById('ent-revoked');
+      const toggleEntBtn   = document.getElementById('toggle-ent-btn');
+      const resendBtn      = document.getElementById('resend-btn');
+      const ordersTbody    = document.getElementById('detail-orders-tbody');
+      const noOrdersMsg    = document.getElementById('no-orders-msg');
+      const downloadsList  = document.getElementById('downloads-list');
+      const noDownloadsMsg = document.getElementById('no-downloads-msg');
+      const closeDetailBtn = document.getElementById('close-detail-btn');
+
+      async function loadList() {
+        const params = new URLSearchParams({
+          page: String(state.page),
+          pageSize: String(state.pageSize),
+          ...(state.q ? { q: state.q } : {}),
+        });
+
+        const res  = await fetch(`/api/admin/customers?${params}`);
+        const data = await res.json();
+
+        tbody.textContent = '';
+        state.total = data.total ?? 0;
+
+        if (!data.customers?.length) {
+          emptyMsg.style.display = 'block';
+          updatePagination();
+          return;
+        }
+        emptyMsg.style.display = 'none';
+
+        for (const c of data.customers) {
+          const tr = document.createElement('tr');
+          if (state.selectedCustomer?.id === c.id) tr.classList.add('selected');
+
+          const tdEmail = document.createElement('td');
+          tdEmail.textContent = c.email;
+
+          const tdOrders = document.createElement('td');
+          tdOrders.textContent = c.total_orders;
+
+          const tdLastPaid = document.createElement('td');
+          tdLastPaid.textContent = fmt.date(c.last_paid_at);
+
+          const tdModel = document.createElement('td');
+          tdModel.textContent = c.selected_model
+            ? `${modelLabel(c.selected_model)} / ${c.selected_size ?? '—'}`
+            : '—';
+
+          const tdAccess = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.classList.add('badge', c.entitlement_active ? 'active' : 'inactive');
+          badge.textContent = c.entitlement_active ? 'Ativo' : 'Inativo';
+          tdAccess.appendChild(badge);
+
+          tr.append(tdEmail, tdOrders, tdLastPaid, tdModel, tdAccess);
+          tr.addEventListener('click', () => openDetail(c.id));
+          tbody.appendChild(tr);
+        }
+        updatePagination();
+      }
+
+      function updatePagination() {
+        const totalPages = Math.ceil(state.total / state.pageSize) || 1;
+        pageInfo.textContent = `Página ${state.page} de ${totalPages} (${state.total} clientes)`;
+        prevBtn.disabled = state.page <= 1;
+        nextBtn.disabled = state.page >= totalPages;
+      }
+
+      prevBtn.addEventListener('click', () => { state.page--; loadList(); });
+      nextBtn.addEventListener('click', () => { state.page++; loadList(); });
+      searchBtn.addEventListener('click', () => { state.q = qInput.value.trim(); state.page = 1; loadList(); });
+      qInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBtn.click(); });
+
+      async function openDetail(customerId) {
+        state.selectedCustomer = { id: customerId };
+        detailMsg.className = 'msg';
+        detailMsg.textContent = '';
+
+        const res  = await fetch(`/api/admin/customers/detail?customerId=${encodeURIComponent(customerId)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          showDetailMsg('Erro ao carregar cliente: ' + (data.error ?? res.status), false);
+          return;
+        }
+
+        state.selectedCustomer = { id: customerId, email: data.profile.email, entitlement: data.entitlement };
+
+        detailEmail.textContent = data.profile.email;
+
+        const ent = data.entitlement;
+        entStatus.textContent   = ent?.active ? 'Ativo' : 'Inativo';
+        entGranted.textContent  = fmt.date(ent?.granted_at);
+        entRevoked.textContent  = fmt.date(ent?.revoked_at);
+        toggleEntBtn.textContent = ent?.active ? 'Revogar acesso' : 'Conceder acesso';
+
+        ordersTbody.textContent = '';
+        if (data.orders?.length) {
+          noOrdersMsg.style.display = 'none';
+          for (const o of data.orders) {
+            const tr = document.createElement('tr');
+
+            const tdStatus = document.createElement('td');
+            tdStatus.textContent = o.status;
+
+            const tdModel = document.createElement('td');
+            tdModel.textContent = modelLabel(o.selected_model);
+
+            const tdSize = document.createElement('td');
+            tdSize.textContent = o.selected_size ?? '—';
+
+            const tdAmt = document.createElement('td');
+            tdAmt.textContent = fmt.money(o.amount_total);
+
+            const tdPdf = document.createElement('td');
+            if (o.status === 'paid' && o.selected_model && o.selected_size) {
+              const genBtn = document.createElement('button');
+              genBtn.textContent = 'Gerar';
+              genBtn.style.cssText = 'font-size:0.75rem;padding:0.15rem 0.4rem;cursor:pointer;';
+              genBtn.addEventListener('click', () => generatePdf(o.id, genBtn));
+
+              const signBtn = document.createElement('button');
+              signBtn.textContent = 'Baixar';
+              signBtn.style.cssText = 'font-size:0.75rem;padding:0.15rem 0.4rem;cursor:pointer;margin-left:4px;';
+              signBtn.addEventListener('click', () => downloadPdf(o.id, signBtn));
+
+              tdPdf.append(genBtn, signBtn);
+            } else {
+              tdPdf.textContent = '—';
+            }
+
+            tr.append(tdStatus, tdModel, tdSize, tdAmt, tdPdf);
+            ordersTbody.appendChild(tr);
+          }
+        } else {
+          noOrdersMsg.style.display = 'block';
+        }
+
+        downloadsList.textContent = '';
+        if (data.downloads?.length) {
+          noDownloadsMsg.style.display = 'none';
+          for (const dl of data.downloads) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:0.2rem 0; border-bottom: 1px solid var(--color-border);';
+            const span = document.createElement('span');
+            span.textContent = fmt.date(dl.created_at) + ' — ';
+            const code = document.createElement('code');
+            code.style.fontSize = '0.78rem';
+            code.textContent = dl.asset_key;
+            div.append(span, code);
+            downloadsList.appendChild(div);
+          }
+        } else {
+          noDownloadsMsg.style.display = 'block';
+        }
+
+        detailPanel.classList.add('open');
+      }
+
+      closeDetailBtn.addEventListener('click', () => {
+        detailPanel.classList.remove('open');
+        state.selectedCustomer = null;
+        tbody.querySelectorAll('tr').forEach(tr => tr.classList.remove('selected'));
+      });
+
+      function showDetailMsg(text, ok) {
+        detailMsg.textContent = text;
+        detailMsg.className   = 'msg ' + (ok ? 'ok' : 'err');
+        setTimeout(() => { detailMsg.className = 'msg'; detailMsg.textContent = ''; }, 4000);
+      }
+
+      toggleEntBtn.addEventListener('click', async () => {
+        if (!state.selectedCustomer) return;
+        const currentlyActive = state.selectedCustomer.entitlement?.active ?? false;
+        toggleEntBtn.textContent = 'Aguarde…';
+        toggleEntBtn.disabled = true;
+
+        const res = await fetch('/api/admin/customers/toggle-entitlement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerId: state.selectedCustomer.id, active: !currentlyActive }),
+        });
+
+        toggleEntBtn.disabled = false;
+        if (res.ok) {
+          showDetailMsg(currentlyActive ? 'Acesso revogado.' : 'Acesso concedido.', true);
+          openDetail(state.selectedCustomer.id);
+          loadList();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toggleEntBtn.textContent = currentlyActive ? 'Revogar acesso' : 'Conceder acesso';
+          showDetailMsg('Erro: ' + (err.error ?? res.status), false);
+        }
+      });
+
+      resendBtn.addEventListener('click', async () => {
+        if (!state.selectedCustomer) return;
+        resendBtn.textContent = 'Enviando…';
+        resendBtn.disabled = true;
+
+        const res = await fetch('/api/admin/customers/resend-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerId: state.selectedCustomer.id }),
+        });
+
+        resendBtn.textContent = 'Reenviar link';
+        resendBtn.disabled = false;
+
+        if (res.ok) {
+          showDetailMsg('E-mail de acesso enviado!', true);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showDetailMsg('Erro: ' + (err.error ?? res.status), false);
+        }
+      });
+
+      async function generatePdf(orderId, btn) {
+        btn.textContent = '…';
+        btn.disabled = true;
+
+        const res = await fetch('/api/admin/customers/watermark/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId }),
+        });
+
+        btn.disabled = false;
+        if (res.ok) {
+          const data = await res.json();
+          btn.textContent = data.alreadyExists ? 'Já existe' : 'Gerado!';
+          showDetailMsg(data.alreadyExists ? 'PDF já existia.' : 'PDF gerado com sucesso!', true);
+        } else {
+          btn.textContent = 'Erro';
+          const err = await res.json().catch(() => ({}));
+          showDetailMsg('Erro ao gerar: ' + (err.error ?? res.status), false);
+        }
+      }
+
+      async function downloadPdf(orderId, btn) {
+        const orig = btn.textContent;
+        btn.textContent = '…';
+        btn.disabled = true;
+
+        const res = await fetch(`/api/admin/customers/watermark/sign?orderId=${encodeURIComponent(orderId)}`);
+
+        btn.textContent = orig;
+        btn.disabled = false;
+
+        if (res.ok) {
+          const { url } = await res.json();
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.click();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showDetailMsg(
+            err.notFound
+              ? 'PDF não encontrado. Gere-o primeiro.'
+              : 'Erro: ' + (err.error ?? res.status),
+            false,
+          );
+        }
+      }
+
+      loadList();
+    })();
+  </script>
+</AdminLayout>

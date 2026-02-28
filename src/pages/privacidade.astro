@@ -1,0 +1,160 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+---
+
+<LandingLayout
+  title="Política de Privacidade — Quarto de Bebê"
+  description="Saiba como coletamos, usamos e protegemos seus dados pessoais na plataforma Quarto de Bebê."
+>
+  <div style="background: var(--qb-dark); min-height: 100vh; font-family: var(--qb-sans);">
+
+    {/* Header simples */}
+    <header style="border-bottom: 1px solid rgba(255,255,255,0.06); padding: 1.25rem 1.5rem;">
+      <div style="max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;">
+        <a href="/" style="display: flex; align-items: center; gap: 0.75rem; text-decoration: none;">
+          <div style="width: 36px; height: 36px; border-radius: 8px; background: #16a34a; display: flex; align-items: center; justify-content: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 21h18M3 7v14M21 7v14M6 7V4h12v3M9 21v-4a3 3 0 016 0v4"/>
+            </svg>
+          </div>
+          <span style="font-family: var(--qb-serif); font-size: 1.25rem; font-weight: 700; color: #fff;">Quarto de Bebê</span>
+        </a>
+        <a href="/" style="font-size: 0.875rem; color: #64748b; text-decoration: none;">← Voltar</a>
+      </div>
+    </header>
+
+    {/* Conteúdo */}
+    <main style="max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem 5rem;">
+
+      <p style="font-size: 0.8rem; color: #475569; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.08em;">Documento legal</p>
+      <h1 style="font-family: var(--qb-serif); font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; color: #fff; margin-bottom: 0.5rem; line-height: 1.2;">
+        Política de Privacidade
+      </h1>
+      <p style="color: #475569; font-size: 0.875rem; margin-bottom: 3rem;">Última atualização: fevereiro de 2026</p>
+
+      <div style="color: #94a3b8; line-height: 1.8; font-size: 0.95rem;">
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">1. Controlador dos Dados</h2>
+          <p>O <strong style="color: #e2e8f0;">Quarto de Bebê</strong> (quartodebb.com.br) é o controlador dos seus dados pessoais, responsável pelas decisões sobre o tratamento das informações coletadas em nossa plataforma, em conformidade com a <strong style="color: #e2e8f0;">Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018)</strong>.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">2. Dados que Coletamos</h2>
+          <p style="margin-bottom: 1rem;">Coletamos apenas os dados estritamente necessários para a prestação do serviço:</p>
+
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem;">
+            <h3 style="color: #e2e8f0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem;">Dados fornecidos por você</h3>
+            <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+              {['Endereço de e-mail (para criação de conta e acesso ao kit)', 'Nome (opcional, informado no checkout)'].map(item => (
+                <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                  <span style="color: #22c55e; margin-top: 0.1rem; flex-shrink: 0;">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 1.5rem;">
+            <h3 style="color: #e2e8f0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem;">Dados coletados automaticamente</h3>
+            <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+              {[
+                'Dados de navegação e funil de conversão (eventos anônimos)',
+                'Endereço IP (para fins de segurança e rate limiting)',
+                'Parâmetros UTM de campanha de marketing',
+              ].map(item => (
+                <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                  <span style="color: #22c55e; margin-top: 0.1rem; flex-shrink: 0;">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">3. Finalidade do Tratamento</h2>
+          <p style="margin-bottom: 1rem;">Utilizamos seus dados para:</p>
+          <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.75rem;">
+            {[
+              { titulo: 'Execução do contrato', desc: 'Processar sua compra, criar sua conta e disponibilizar o acesso ao kit adquirido.' },
+              { titulo: 'Comunicações transacionais', desc: 'Enviar e-mail de confirmação de compra e link de acesso ao produto.' },
+              { titulo: 'Segurança da plataforma', desc: 'Prevenir fraudes, abusos e acessos não autorizados.' },
+              { titulo: 'Melhoria do serviço', desc: 'Analisar métricas de uso para aprimorar a experiência (dados agregados e anônimos).' },
+            ].map(({ titulo, desc }) => (
+              <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <span style="color: #22c55e; margin-top: 0.25rem; flex-shrink: 0;">▸</span>
+                <span><strong style="color: #e2e8f0;">{titulo}:</strong> {desc}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">4. Compartilhamento de Dados</h2>
+          <p style="margin-bottom: 1rem;">Não vendemos seus dados. Compartilhamos informações apenas com os seguintes parceiros essenciais para a operação do serviço:</p>
+          <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+            {[
+              'Asaas — processamento de pagamentos',
+              'Supabase — armazenamento seguro de dados e autenticação',
+              'Resend — envio de e-mails transacionais',
+              'Vercel — hospedagem da plataforma',
+            ].map(item => (
+              <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <span style="color: #64748b; flex-shrink: 0;">—</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+          <p style="margin-top: 1rem;">Todos os parceiros estão sujeitos a obrigações contratuais de confidencialidade e segurança.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">5. Retenção de Dados</h2>
+          <p>Mantemos seus dados pelo tempo necessário para a prestação do serviço e cumprimento de obrigações legais. Dados de transações financeiras são mantidos por 5 anos conforme exigência fiscal. Você pode solicitar a exclusão da sua conta e dados a qualquer momento.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">6. Seus Direitos (LGPD)</h2>
+          <p style="margin-bottom: 1rem;">Como titular dos dados, você tem direito a:</p>
+          <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+            {[
+              'Confirmar a existência de tratamento dos seus dados',
+              'Acessar os dados que temos sobre você',
+              'Corrigir dados incompletos, inexatos ou desatualizados',
+              'Solicitar a anonimização, bloqueio ou eliminação de dados desnecessários',
+              'Revogar o consentimento a qualquer momento',
+              'Solicitar a portabilidade dos seus dados',
+            ].map(item => (
+              <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <span style="color: #22c55e; margin-top: 0.1rem; flex-shrink: 0;">✓</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+          <p style="margin-top: 1rem;">Para exercer seus direitos, entre em contato pelo e-mail abaixo. Responderemos em até 15 dias úteis.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">7. Segurança</h2>
+          <p>Adotamos medidas técnicas e organizacionais para proteger seus dados, incluindo criptografia em trânsito (HTTPS/TLS), controle de acesso baseado em função (RLS) no banco de dados, e autenticação segura via magic link sem senha.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">8. Cookies</h2>
+          <p>Utilizamos apenas cookies técnicos essenciais para o funcionamento da plataforma (autenticação de sessão). Não utilizamos cookies de rastreamento de terceiros ou publicidade comportamental.</p>
+        </section>
+
+        <section>
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">9. Contato — Encarregado de Dados (DPO)</h2>
+          <p style="margin-bottom: 0.75rem;">Para exercer seus direitos ou esclarecer dúvidas sobre o tratamento de dados pessoais:</p>
+          <a href="mailto:contato@quartosdebebe.com.br" style="display: inline-flex; align-items: center; gap: 0.5rem; color: #4ade80; text-decoration: none; font-weight: 500;">
+            contato@quartosdebebe.com.br
+          </a>
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+</LandingLayout>

@@ -1,0 +1,83 @@
+---
+interface Props {
+  label: string;
+  id: string;
+  name?: string;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  value?: string;
+  hint?: string;
+  error?: string;
+  disabled?: boolean;
+  class?: string;
+}
+
+const {
+  label,
+  id,
+  name,
+  type = 'text',
+  placeholder = '',
+  required = false,
+  value = '',
+  hint,
+  error,
+  disabled = false,
+  class: className = '',
+} = Astro.props;
+
+const inputName = name ?? id;
+const hasError = Boolean(error);
+---
+
+<div style="display: flex; flex-direction: column; gap: 0.375rem;" class={className}>
+  <label
+    for={id}
+    style={`
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(${hasError ? '--color-text' : '--color-muted'});
+      letter-spacing: 0.01em;
+    `}
+  >
+    {label}
+    {required && <span style="color: var(--color-accent2); margin-left: 2px;" aria-hidden="true">*</span>}
+  </label>
+
+  <input
+    id={id}
+    name={inputName}
+    type={type}
+    placeholder={placeholder}
+    required={required}
+    value={value}
+    aria-describedby={hint || error ? `${id}-hint` : undefined}
+    aria-invalid={hasError ? 'true' : undefined}
+    disabled={disabled}
+    style={`
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      border-radius: var(--radius-md);
+      border: 1.5px solid ${hasError ? 'var(--color-accent2)' : 'var(--color-border)'};
+      background: ${disabled ? 'var(--color-surface)' : 'var(--color-bg)'};
+      color: ${disabled ? 'var(--color-muted)' : 'var(--color-text)'};
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      transition: border-color 0.2s;
+      outline: none;
+      cursor: ${disabled ? 'not-allowed' : 'text'};
+    `}
+    onfocus={disabled ? undefined : `this.style.borderColor='var(--color-accent2)'`}
+    onblur={disabled ? undefined : `this.style.borderColor='${hasError ? 'var(--color-accent2)' : 'var(--color-border)'}'`}
+  />
+
+  {(hint || error) && (
+    <span
+      id={`${id}-hint`}
+      style={`font-size: 0.8rem; color: var(${hasError ? '--color-accent2' : '--color-muted'});`}
+    >
+      {error ?? hint}
+    </span>
+  )}
+</div>

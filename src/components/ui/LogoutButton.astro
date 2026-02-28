@@ -1,0 +1,39 @@
+---
+interface Props {
+  class?: string;
+}
+const { class: className = '' } = Astro.props;
+---
+
+<button
+  id="logout-btn"
+  type="button"
+  class={className}
+  style="
+    background: transparent;
+    border: none;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    padding: 0.25rem 0;
+    transition: color 0.2s;
+  "
+  onmouseover="this.style.color='var(--color-text)'"
+  onmouseout="this.style.color='var(--color-muted)'"
+  aria-label="Sair da conta"
+>
+  Sair
+</button>
+
+<script>
+  import { createBrowserClient } from '../../lib/supabase/browser';
+  import { clearSessionCookies }  from '../../lib/session';
+
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    clearSessionCookies();
+    window.location.href = '/';
+  });
+</script>

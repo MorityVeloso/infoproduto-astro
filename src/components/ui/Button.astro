@@ -1,0 +1,84 @@
+---
+interface Props {
+  variant?: 'primary' | 'secondary' | 'ghost';
+  href?: string;
+  type?: 'button' | 'submit' | 'reset';
+  class?: string;
+  disabled?: boolean;
+  'aria-label'?: string;
+}
+
+const {
+  variant = 'primary',
+  href,
+  type = 'button',
+  class: className = '',
+  disabled = false,
+  'aria-label': ariaLabel,
+} = Astro.props;
+
+const styles: Record<string, string> = {
+  primary: `
+    background: var(--color-text);
+    color: var(--color-bg);
+    border: 1.5px solid var(--color-text);
+  `,
+  secondary: `
+    background: transparent;
+    color: var(--color-text);
+    border: 1.5px solid var(--color-text);
+  `,
+  ghost: `
+    background: transparent;
+    color: var(--color-muted);
+    border: 1.5px solid transparent;
+  `,
+};
+
+const base = `
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s, transform 0.1s;
+  white-space: nowrap;
+`;
+---
+
+{href ? (
+  <a
+    href={href}
+    style={`${base} ${styles[variant]}`}
+    class={className}
+    aria-label={ariaLabel}
+    aria-disabled={disabled}
+    onmouseover="this.style.opacity='0.8'"
+    onmouseout="this.style.opacity='1'"
+    onmousedown="this.style.transform='scale(0.98)'"
+    onmouseup="this.style.transform='scale(1)'"
+  >
+    <slot />
+  </a>
+) : (
+  <button
+    type={type}
+    style={`${base} ${styles[variant]}`}
+    class={className}
+    disabled={disabled}
+    aria-label={ariaLabel}
+    onmouseover="this.style.opacity='0.8'"
+    onmouseout="this.style.opacity='1'"
+    onmousedown="this.style.transform='scale(0.98)'"
+    onmouseup="this.style.transform='scale(1)'"
+  >
+    <slot />
+  </button>
+)}

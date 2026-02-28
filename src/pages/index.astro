@@ -1,0 +1,41 @@
+---
+/**
+ * index.astro — Landing page do produto.
+ *
+ * TODO: Implemente a landing page do seu produto aqui.
+ *
+ * Estrutura sugerida:
+ *   1. Header + Hero com CTA principal
+ *   2. Seção de dor / problema
+ *   3. Solução / benefícios
+ *   4. Prova social (depoimentos)
+ *   5. Preço + CTA de compra
+ *   6. FAQ
+ *   7. Footer
+ *
+ * Exemplo de referência: quarto-de-bebe-astro/src/components/landing/
+ *
+ * Use o LandingLayout disponível em src/layouts/LandingLayout.astro.
+ */
+
+import LandingLayout from '../layouts/LandingLayout.astro';
+import { PRODUCT } from '../config/product';
+---
+
+<LandingLayout title={PRODUCT.name}>
+  <main style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:2rem;">
+    <div style="max-width:600px;text-align:center;">
+      <div style="display:inline-block;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:6px 16px;margin-bottom:1.5rem;">
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#4ade80;">SKELETON</span>
+      </div>
+      <h1 style="font-size:clamp(2rem,5vw,3rem);font-weight:800;margin-bottom:1rem;line-height:1.2;">{PRODUCT.name}</h1>
+      <p style="color:#94a3b8;font-size:1.125rem;margin-bottom:2rem;line-height:1.6;">
+        Substitua esta página pela landing page do seu produto.<br />
+        Veja <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">src/pages/index.astro</code> para instruções.
+      </p>
+      <a href="/checkout" style="display:inline-block;padding:14px 32px;background:#16a34a;color:#fff;text-decoration:none;border-radius:10px;font-size:1rem;font-weight:700;">
+        Comprar agora →
+      </a>
+    </div>
+  </main>
+</LandingLayout>

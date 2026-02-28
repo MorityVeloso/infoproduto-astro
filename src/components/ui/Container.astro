@@ -1,0 +1,16 @@
+---
+interface Props {
+  class?: string;
+  narrow?: boolean;
+}
+
+const { class: className = '', narrow = false } = Astro.props;
+const maxWidth = narrow ? '720px' : '1200px';
+---
+
+<div
+  style={`max-width: ${maxWidth}; margin: 0 auto; padding: 0 1.5rem; width: 100%;`}
+  class={className}
+>
+  <slot />
+</div>

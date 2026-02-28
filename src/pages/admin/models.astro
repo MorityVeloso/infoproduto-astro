@@ -1,0 +1,962 @@
+---
+// src/pages/admin/models.astro
+export const prerender = false;
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { requireAdmin } from '../../lib/require-admin';
+import { createAdminClient } from '../../lib/supabase/admin';
+
+const result = await requireAdmin(Astro.request);
+if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
+const { profile } = result;
+
+const SUPABASE_URL = import.meta.env.PUBLIC_SUPABASE_URL as string;
+
+const admin = createAdminClient();
+const { data: models = [] } = await admin
+  .from('models')
+  .select('id, name, subtitle, description, sort_order, is_active, cover_path, colors, tag, tag_color, created_at')
+  .order('sort_order', { ascending: true })
+  .order('created_at', { ascending: true });
+
+function coverUrl(path: string | null, id: string) {
+  if (path) return `${SUPABASE_URL}/storage/v1/object/public/model-images/${path}`;
+  return `/images/${id}/card.jpg`;
+}
+---
+
+<AdminLayout title="Modelos — Admin" email={profile.email}>
+  <style>
+    /* ── Table ─────────────────────────────────────────────────────────── */
+    table               { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td              { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+    th                  { font-weight: 600; color: var(--color-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .badge              { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+    .badge.active       { background: rgba(34,197,94,0.15);  color: #4ade80; }
+    .badge.inactive     { background: rgba(239,68,68,0.15);  color: #f87171; }
+    .action-cell        { display: flex; gap: 0.4rem; align-items: center; white-space: nowrap; }
+    .empty              { text-align: center; padding: 2rem; color: var(--color-muted); }
+    .cover-thumb        { width: 48px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--color-border); display: block; }
+    .cover-placeholder  { width: 48px; height: 36px; border-radius: 4px; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: var(--color-muted); }
+    .swatches           { display: flex; gap: 3px; }
+    .swatch             { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.1); }
+
+    /* ── Buttons ───────────────────────────────────────────────────────── */
+    .btn-sm             { padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.8rem; }
+    .btn-sm:hover       { background: var(--color-surface-hover); }
+    .btn-primary        { padding: 0.4rem 0.9rem; border-radius: 6px; border: none; background: #22c55e; color: #fff; cursor: pointer; font-size: 0.875rem; font-weight: 600; }
+    .btn-primary:hover  { background: #16a34a; }
+    .btn-primary:disabled, .btn-sm:disabled { opacity: 0.5; cursor: default; }
+    .btn-upload         { padding: 0.3rem 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text); cursor: pointer; font-size: 0.82rem; white-space: nowrap; }
+    .btn-upload:hover   { background: var(--color-surface-hover); }
+
+    /* ── Messages ──────────────────────────────────────────────────────── */
+    .msg                { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; display: none; margin-bottom: 0.75rem; }
+    .msg.ok             { background: rgba(34,197,94,0.12);  color: #4ade80; display: block; }
+    .msg.err            { background: rgba(239,68,68,0.12);  color: #f87171; display: block; }
+    .upload-status      { font-size: 0.78rem; }
+    .upload-status.ok   { color: #4ade80; }
+    .upload-status.err  { color: #f87171; }
+
+    /* ── Edit panel ────────────────────────────────────────────────────── */
+    .edit-panel         { display: none; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 1.25rem; margin-top: 1.25rem; }
+    .edit-panel.open    { display: block; }
+    .panel-header       { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .close-btn          { background: none; border: none; cursor: pointer; font-size: 1.2rem; color: var(--color-muted); line-height: 1; }
+
+    /* ── Tabs ──────────────────────────────────────────────────────────── */
+    .tab-bar            { display: flex; gap: 0; border-bottom: 1px solid var(--color-border); margin-bottom: 1.25rem; }
+    .tab-btn            { padding: 0.5rem 1rem; font-size: 0.85rem; cursor: pointer; background: none; border: none; border-bottom: 2px solid transparent; color: var(--color-muted); margin-bottom: -1px; }
+    .tab-btn.active     { color: #22c55e; border-bottom-color: #22c55e; }
+    .tab-pane           { display: none; }
+    .tab-pane.active    { display: block; }
+    .size-tab-bar       { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
+    .size-tab-btn       { padding: 0.3rem 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); background: transparent; cursor: pointer; font-size: 0.82rem; color: var(--color-muted); }
+    .size-tab-btn.active{ background: rgba(34,197,94,0.12); border-color: #22c55e; color: #22c55e; }
+    .size-pane          { display: none; }
+    .size-pane.active   { display: block; }
+
+    /* ── Form fields ───────────────────────────────────────────────────── */
+    .field              { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
+    .field label        { font-size: 0.8rem; font-weight: 600; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field textarea,
+    .field select       { padding: 0.4rem 0.65rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 0.9rem; font-family: inherit; background: var(--color-bg); color: var(--color-text); }
+    .field textarea     { resize: vertical; min-height: 70px; }
+    .form-row           { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .form-row .field    { flex: 1; min-width: 140px; }
+    @media (max-width: 600px) {
+      .form-row         { flex-direction: column; }
+      .form-row .field  { min-width: 0; }
+    }
+
+    /* ── Cover upload ──────────────────────────────────────────────────── */
+    .cover-upload-row   { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .cover-preview-lg   { width: 80px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid var(--color-border); display: block; }
+    .cover-placeholder-lg { width: 80px; height: 60px; border-radius: 6px; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--color-muted); }
+
+    /* ── Color pickers ─────────────────────────────────────────────────── */
+    .colors-row         { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+    .color-item         { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+    .color-item input[type="color"] { width: 40px; height: 40px; padding: 2px; border: 1px solid var(--color-border); border-radius: 6px; cursor: pointer; background: transparent; }
+    .clear-color        { background: none; border: none; cursor: pointer; font-size: 0.7rem; color: var(--color-muted); padding: 0; }
+
+    /* ── Upload rows (files) ───────────────────────────────────────────── */
+    .upload-row         { display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem 0; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
+    .upload-row:last-child { border-bottom: none; }
+    .upload-label       { font-size: 0.85rem; min-width: 140px; flex-shrink: 0; }
+    .upload-row input[type="file"] { font-size: 0.8rem; flex: 1; min-width: 0; }
+
+    /* ── Create section ────────────────────────────────────────────────── */
+    .create-section     { margin-top: 2rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 1.25rem; }
+  </style>
+
+  <h1 style="font-family: var(--font-serif); font-size: 1.75rem; font-weight: 400; margin-bottom: 1rem;">Modelos</h1>
+
+  <div id="global-msg" class="msg"></div>
+
+  <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+  <table>
+    <thead>
+      <tr>
+        <th>Capa</th>
+        <th>ID</th>
+        <th>Nome</th>
+        <th>Paleta</th>
+        <th>Ordem</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="models-body">
+      {(models ?? []).map((m) => (
+        <tr data-model-id={m.id}>
+          <td>
+            <img
+              class="cover-thumb"
+              src={coverUrl(m.cover_path as string | null, m.id)}
+              alt=""
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+            />
+            <div class="cover-placeholder" style="display:none">sem foto</div>
+          </td>
+          <td style="font-size:0.78rem; color: var(--color-muted); font-family: monospace;">{m.id}</td>
+          <td>
+            <strong>{m.name}</strong>
+            {m.subtitle && <span style="display:block; font-size:0.8rem; color: var(--color-muted);">{m.subtitle}</span>}
+            {m.tag && <span class="badge" style={`background: ${m.tag_color ?? '#f59e0b'}22; color: ${m.tag_color ?? '#f59e0b'}; margin-top:2px;`}>{m.tag}</span>}
+          </td>
+          <td>
+            {m.colors && Array.isArray(m.colors) && (m.colors as string[]).length > 0
+              ? <div class="swatches">{(m.colors as string[]).map(c => <div class="swatch" style={`background:${c}`}></div>)}</div>
+              : <span style="color:var(--color-muted); font-size:0.75rem;">—</span>
+            }
+          </td>
+          <td>{m.sort_order ?? '—'}</td>
+          <td>
+            <span class={`badge ${m.is_active ? 'active' : 'inactive'}`}>
+              {m.is_active ? 'Ativo' : 'Inativo'}
+            </span>
+          </td>
+          <td>
+            <div class="action-cell">
+              <button
+                class="btn-sm edit-btn"
+                data-id={m.id}
+                data-name={m.name}
+                data-subtitle={m.subtitle ?? ''}
+                data-description={m.description ?? ''}
+                data-sort-order={String(m.sort_order ?? '')}
+                data-is-active={String(m.is_active)}
+                data-cover-path={m.cover_path ?? ''}
+                data-colors={JSON.stringify(m.colors ?? [])}
+                data-tag={m.tag ?? ''}
+                data-tag-color={m.tag_color ?? '#f59e0b'}
+              >Editar</button>
+              <button
+                class="btn-sm toggle-btn"
+                data-id={m.id}
+                data-is-active={String(m.is_active)}
+              >{m.is_active ? 'Desativar' : 'Ativar'}</button>
+            </div>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+  </div>
+
+  {(models ?? []).length === 0 && (
+    <div class="empty">Nenhum modelo cadastrado.</div>
+  )}
+
+  <!-- ── Edit panel ──────────────────────────────────────────────────────── -->
+  <div class="edit-panel" id="edit-panel">
+    <div class="panel-header">
+      <strong style="font-size:0.95rem;">Editar modelo — <span id="edit-panel-id"></span></strong>
+      <button id="close-edit-btn" class="close-btn">&#x2715;</button>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="apresentacao">Apresentação</button>
+      <button class="tab-btn" data-tab="kit">Arquivos do Kit</button>
+      <button class="tab-btn" data-tab="tamanhos">Por Tamanho (P/M/G)</button>
+    </div>
+
+    <!-- Tab 1: Apresentação -->
+    <div class="tab-pane active" data-tab="apresentacao">
+      <div id="edit-msg" class="msg"></div>
+      <input type="hidden" id="edit-id" />
+
+      <div class="form-row">
+        <div class="field">
+          <label for="edit-name">Nome</label>
+          <input type="text" id="edit-name" placeholder="Nome do modelo" />
+        </div>
+        <div class="field">
+          <label for="edit-subtitle">Subtítulo</label>
+          <input type="text" id="edit-subtitle" placeholder="Subtítulo" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="edit-description">Descrição</label>
+        <textarea id="edit-description" placeholder="Descrição"></textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="field" style="max-width:100px">
+          <label for="edit-sort-order">Ordem</label>
+          <input type="number" id="edit-sort-order" placeholder="0" min="0" />
+        </div>
+        <div class="field" style="max-width:140px">
+          <label for="edit-is-active">Status</label>
+          <select id="edit-is-active">
+            <option value="true">Ativo</option>
+            <option value="false">Inativo</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Cover image -->
+      <div class="field">
+        <label>Imagem do Card</label>
+        <div class="cover-upload-row">
+          <img id="cover-preview" class="cover-preview-lg" src="" alt="" style="display:none" />
+          <div id="cover-placeholder" class="cover-placeholder-lg">sem imagem</div>
+          <div style="display:flex; flex-direction:column; gap:0.4rem;">
+            <input type="file" id="cover-file-input" accept="image/*" style="font-size:0.8rem;" />
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <button class="btn-upload" id="cover-upload-btn">Enviar imagem</button>
+              <span id="cover-upload-status" class="upload-status"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Colors palette -->
+      <div class="field">
+        <label>Paleta de cores (até 5)</label>
+        <div class="colors-row" id="colors-row">
+          {[0,1,2,3,4].map(i => (
+            <div class="color-item" data-color-index={i}>
+              <input type="color" class="color-input" value="#cccccc" />
+              <button class="clear-color" title="Limpar">×</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Tag -->
+      <div class="form-row">
+        <div class="field">
+          <label for="edit-tag">Tag (ex: MAIS VENDIDO)</label>
+          <input type="text" id="edit-tag" placeholder="Deixe vazio para não exibir" maxlength="30" />
+        </div>
+        <div class="field" style="max-width:130px">
+          <label for="edit-tag-color">Cor da tag</label>
+          <input type="color" id="edit-tag-color" value="#f59e0b" style="width:100%; height:38px; padding:2px; border:1px solid var(--color-border); border-radius:6px; cursor:pointer; background:transparent;" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+        <button class="btn-primary" id="save-edit-btn">Salvar apresentação</button>
+        <button class="btn-sm" id="cancel-edit-btn">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Tab 2: Arquivos do Kit (per model) -->
+    <div class="tab-pane" data-tab="kit">
+      <p style="font-size:0.82rem; color:var(--color-muted); margin-bottom:1rem;">
+        Arquivos comuns a todos os tamanhos do modelo. Substituição automática (upsert).
+      </p>
+      <div id="kit-msg" class="msg"></div>
+
+      <div class="upload-row">
+        <span class="upload-label">Lista de Compras <small style="color:var(--color-muted)">.pdf</small></span>
+        <input type="file" class="kit-file" data-asset="shopping_list" accept=".pdf" />
+        <button class="btn-upload kit-upload-btn" data-asset="shopping_list">Enviar</button>
+        <span class="upload-status" data-status="shopping_list"></span>
+      </div>
+
+      <div class="upload-row">
+        <span class="upload-label">Bônus <small style="color:var(--color-muted)">.pdf</small></span>
+        <input type="file" class="kit-file" data-asset="bonus" accept=".pdf" />
+        <button class="btn-upload kit-upload-btn" data-asset="bonus">Enviar</button>
+        <span class="upload-status" data-status="bonus"></span>
+      </div>
+
+      <div class="upload-row">
+        <span class="upload-label">Order Bump <small style="color:var(--color-muted)">.pdf</small></span>
+        <input type="file" class="kit-file" data-asset="order_bump" accept=".pdf" />
+        <button class="btn-upload kit-upload-btn" data-asset="order_bump">Enviar</button>
+        <span class="upload-status" data-status="order_bump"></span>
+      </div>
+    </div>
+
+    <!-- Tab 3: Arquivos por Tamanho -->
+    <div class="tab-pane" data-tab="tamanhos">
+      <p style="font-size:0.82rem; color:var(--color-muted); margin-bottom:1rem;">
+        Selecione o tamanho e envie os arquivos correspondentes.
+      </p>
+      <div id="size-msg" class="msg"></div>
+
+      <div class="size-tab-bar">
+        <button class="size-tab-btn active" data-size="P">P — 8m²</button>
+        <button class="size-tab-btn" data-size="M">M — 9m²</button>
+        <button class="size-tab-btn" data-size="G">G — 12m²</button>
+      </div>
+
+      {['P', 'M', 'G'].map(sz => (
+        <div class={`size-pane${sz === 'P' ? ' active' : ''}`} data-size={sz}>
+          <div class="upload-row">
+            <span class="upload-label">Projeto Base <small style="color:var(--color-muted)">.pdf</small></span>
+            <input type="file" class="size-file" data-asset="project_pdf" data-size={sz} accept=".pdf" />
+            <button class="btn-upload size-upload-btn" data-asset="project_pdf" data-size={sz}>Enviar</button>
+            <span class="upload-status" data-status={`project_pdf_${sz}`}></span>
+          </div>
+          {[1,2,3,4].map(n => (
+            <div class="upload-row">
+              <span class="upload-label">Render {n} <small style="color:var(--color-muted)">.webp</small></span>
+              <input type="file" class="size-file" data-asset={`render_${n}`} data-size={sz} accept="image/*" />
+              <button class="btn-upload size-upload-btn" data-asset={`render_${n}`} data-size={sz}>Enviar</button>
+              <span class="upload-status" data-status={`render_${n}_${sz}`}></span>
+            </div>
+          ))}
+          <div class="upload-row">
+            <span class="upload-label">Renders ZIP</span>
+            <input type="file" class="size-file" data-asset="renders_zip" data-size={sz} accept=".zip" />
+            <button class="btn-upload size-upload-btn" data-asset="renders_zip" data-size={sz}>Enviar</button>
+            <span class="upload-status" data-status={`renders_zip_${sz}`}></span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <!-- ── Create section ─────────────────────────────────────────────────── -->
+  <div class="create-section">
+    <h2 style="font-size:1rem; font-weight:600; margin-bottom:1rem;">Adicionar novo modelo</h2>
+    <p style="font-size:0.8rem; color:var(--color-muted); margin-bottom:1rem;">
+      Após criar, use o botão "Editar" para adicionar imagem, cores, tag e arquivos do kit.
+    </p>
+    <div id="create-msg" class="msg"></div>
+
+    <div class="field">
+      <label for="create-id">ID (slug) <span style="color:#f87171">*</span></label>
+      <input type="text" id="create-id" placeholder="ex: neutro-ii (letras, números, hífens)" autocomplete="off" />
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="create-name">Nome <span style="color:#f87171">*</span></label>
+        <input type="text" id="create-name" placeholder="Nome do modelo" />
+      </div>
+      <div class="field">
+        <label for="create-subtitle">Subtítulo</label>
+        <input type="text" id="create-subtitle" placeholder="Subtítulo opcional" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="create-description">Descrição</label>
+      <textarea id="create-description" placeholder="Descrição do modelo"></textarea>
+    </div>
+
+    <div class="field" style="max-width:160px;">
+      <label for="create-sort-order">Ordem</label>
+      <input type="number" id="create-sort-order" placeholder="0" min="0" value="0" />
+    </div>
+
+    <button class="btn-primary" id="create-btn">Criar modelo</button>
+  </div>
+
+  <script>
+    (() => {
+      // ── Helpers ────────────────────────────────────────────────────────
+      function showMsg(el: HTMLElement, text: string, kind: 'ok' | 'err') {
+        el.textContent = text;
+        el.className = `msg ${kind}`;
+      }
+      function hideMsg(el: HTMLElement) { el.textContent = ''; el.className = 'msg'; }
+
+      function setLoading(btn: HTMLButtonElement, loading: boolean, label: string) {
+        btn.disabled = loading;
+        btn.textContent = loading ? 'Aguarde…' : label;
+      }
+
+      function setStatus(el: HTMLElement | null, text: string, kind: 'ok' | 'err' | '') {
+        if (!el) return;
+        el.textContent = text;
+        el.className = `upload-status${kind ? ' ' + kind : ''}`;
+      }
+
+      function makePlaceholderSpan() {
+        const sp = document.createElement('span');
+        sp.style.color = 'var(--color-muted)';
+        sp.style.fontSize = '0.75rem';
+        sp.textContent = '\u2014';
+        return sp;
+      }
+
+      // ── Element refs ───────────────────────────────────────────────────
+      const globalMsg     = document.getElementById('global-msg')     as HTMLElement;
+      const editPanel     = document.getElementById('edit-panel')     as HTMLElement;
+      const editPanelId   = document.getElementById('edit-panel-id') as HTMLElement;
+      const editMsg       = document.getElementById('edit-msg')       as HTMLElement;
+      const kitMsg        = document.getElementById('kit-msg')        as HTMLElement;
+      const sizeMsg       = document.getElementById('size-msg')       as HTMLElement;
+      const editId        = document.getElementById('edit-id')        as HTMLInputElement;
+      const editName      = document.getElementById('edit-name')      as HTMLInputElement;
+      const editSubtitle  = document.getElementById('edit-subtitle')  as HTMLInputElement;
+      const editDesc      = document.getElementById('edit-description') as HTMLTextAreaElement;
+      const editOrder     = document.getElementById('edit-sort-order')  as HTMLInputElement;
+      const editIsActive  = document.getElementById('edit-is-active')   as HTMLSelectElement;
+      const editTag       = document.getElementById('edit-tag')         as HTMLInputElement;
+      const editTagColor  = document.getElementById('edit-tag-color')   as HTMLInputElement;
+      const saveEditBtn   = document.getElementById('save-edit-btn')  as HTMLButtonElement;
+      const cancelEditBtn = document.getElementById('cancel-edit-btn') as HTMLButtonElement;
+      const closeEditBtn  = document.getElementById('close-edit-btn')  as HTMLButtonElement;
+      const coverPreview  = document.getElementById('cover-preview')   as HTMLImageElement;
+      const coverPlaceholder = document.getElementById('cover-placeholder') as HTMLElement;
+      const coverFileInput= document.getElementById('cover-file-input') as HTMLInputElement;
+      const coverUploadBtn= document.getElementById('cover-upload-btn') as HTMLButtonElement;
+      const coverStatus   = document.getElementById('cover-upload-status') as HTMLElement;
+      const colorsRow     = document.getElementById('colors-row')     as HTMLElement;
+      const createMsg     = document.getElementById('create-msg')     as HTMLElement;
+      const createId      = document.getElementById('create-id')      as HTMLInputElement;
+      const createName    = document.getElementById('create-name')    as HTMLInputElement;
+      const createSubtitle= document.getElementById('create-subtitle') as HTMLInputElement;
+      const createDesc    = document.getElementById('create-description') as HTMLTextAreaElement;
+      const createOrder   = document.getElementById('create-sort-order') as HTMLInputElement;
+      const createBtn     = document.getElementById('create-btn')     as HTMLButtonElement;
+      const modelsTbody   = document.getElementById('models-body')    as HTMLTableSectionElement;
+
+      // ── Tab switching ──────────────────────────────────────────────────
+      editPanel.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab!;
+          editPanel.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          editPanel.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          editPanel.querySelector<HTMLElement>(`.tab-pane[data-tab="${tab}"]`)?.classList.add('active');
+        });
+      });
+
+      editPanel.querySelectorAll<HTMLButtonElement>('.size-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sz = btn.dataset.size!;
+          editPanel.querySelectorAll('.size-tab-btn').forEach(b => b.classList.remove('active'));
+          editPanel.querySelectorAll('.size-pane').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          editPanel.querySelector<HTMLElement>(`.size-pane[data-size="${sz}"]`)?.classList.add('active');
+        });
+      });
+
+      // ── Color pickers ──────────────────────────────────────────────────
+      type ColorItem = HTMLElement & { _active?: boolean };
+      const DEFAULT_COLORS = ['#cccccc', '#bbbbbb', '#aaaaaa', '#999999', '#888888'];
+
+      function loadColors(colors: string[]) {
+        const items = colorsRow.querySelectorAll<ColorItem>('.color-item');
+        items.forEach((item, i) => {
+          const input = item.querySelector<HTMLInputElement>('input[type="color"]')!;
+          input.value = colors[i] ?? DEFAULT_COLORS[i];
+          item._active = !!colors[i];
+          input.style.opacity = colors[i] ? '1' : '0.4';
+        });
+      }
+
+      function getColors(): string[] {
+        return Array.from(colorsRow.querySelectorAll<HTMLInputElement>('.color-input'))
+          .filter((inp) => {
+            const item = inp.closest<ColorItem>('.color-item');
+            return item?._active !== false;
+          })
+          .map(inp => inp.value);
+      }
+
+      colorsRow.querySelectorAll<ColorItem>('.color-item').forEach(item => {
+        const input = item.querySelector<HTMLInputElement>('input[type="color"]')!;
+        const clearBtn = item.querySelector<HTMLButtonElement>('.clear-color')!;
+        input.addEventListener('input', () => { item._active = true; input.style.opacity = '1'; });
+        clearBtn.addEventListener('click', () => { item._active = false; input.style.opacity = '0.4'; });
+      });
+
+      // ── Cover image preview ────────────────────────────────────────────
+      coverFileInput.addEventListener('change', () => {
+        const file = coverFileInput.files?.[0];
+        if (!file) return;
+        coverPreview.src = URL.createObjectURL(file);
+        coverPreview.style.display = 'block';
+        coverPlaceholder.style.display = 'none';
+      });
+
+      coverUploadBtn.addEventListener('click', async () => {
+        const file = coverFileInput.files?.[0];
+        const modelId = editId.value;
+        if (!file) { setStatus(coverStatus, 'Selecione um arquivo', 'err'); return; }
+        if (!modelId) return;
+
+        const origLabel = coverUploadBtn.textContent ?? 'Enviar imagem';
+        setLoading(coverUploadBtn, true, origLabel);
+        setStatus(coverStatus, '', '');
+
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('model_id', modelId);
+        fd.append('asset_type', 'cover_image');
+
+        try {
+          const res = await fetch('/api/admin/models/upload', { method: 'POST', body: fd });
+          setLoading(coverUploadBtn, false, origLabel);
+          if (res.ok) {
+            const { url } = await res.json() as { path: string; url?: string };
+            setStatus(coverStatus, '\u2713 Enviado', 'ok');
+            if (url) {
+              coverPreview.src = url + '?t=' + Date.now();
+              coverPreview.style.display = 'block';
+              coverPlaceholder.style.display = 'none';
+              const row = modelsTbody.querySelector(`tr[data-model-id="${modelId}"]`);
+              const thumb = row?.querySelector<HTMLImageElement>('.cover-thumb');
+              if (thumb) { thumb.src = url + '?t=' + Date.now(); thumb.style.display = 'block'; }
+            }
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            setStatus(coverStatus, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(coverUploadBtn, false, origLabel);
+          setStatus(coverStatus, 'Erro de rede', 'err');
+        }
+      });
+
+      // ── Kit file uploads ───────────────────────────────────────────────
+      editPanel.querySelectorAll<HTMLButtonElement>('.kit-upload-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const asset = btn.dataset.asset!;
+          const modelId = editId.value;
+          const fileInput = editPanel.querySelector<HTMLInputElement>(`.kit-file[data-asset="${asset}"]`);
+          const statusEl = editPanel.querySelector<HTMLElement>(`[data-status="${asset}"]`);
+          const file = fileInput?.files?.[0];
+
+          if (!file) { setStatus(statusEl, 'Selecione um arquivo', 'err'); return; }
+          if (!modelId) return;
+
+          const origLabel = btn.textContent ?? 'Enviar';
+          setLoading(btn, true, origLabel);
+          setStatus(statusEl, '', '');
+          hideMsg(kitMsg);
+
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('model_id', modelId);
+          fd.append('asset_type', asset);
+
+          try {
+            const res = await fetch('/api/admin/models/upload', { method: 'POST', body: fd });
+            setLoading(btn, false, origLabel);
+            if (res.ok) {
+              setStatus(statusEl, '\u2713 Enviado', 'ok');
+              if (fileInput) fileInput.value = '';
+            } else {
+              const err = await res.json().catch(() => ({})) as { error?: string };
+              setStatus(statusEl, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+            }
+          } catch {
+            setLoading(btn, false, origLabel);
+            setStatus(statusEl, 'Erro de rede', 'err');
+          }
+        });
+      });
+
+      // ── Size file uploads ──────────────────────────────────────────────
+      editPanel.querySelectorAll<HTMLButtonElement>('.size-upload-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const asset = btn.dataset.asset!;
+          const size  = btn.dataset.size!;
+          const modelId = editId.value;
+          const fileInput = editPanel.querySelector<HTMLInputElement>(`.size-file[data-asset="${asset}"][data-size="${size}"]`);
+          const statusEl = editPanel.querySelector<HTMLElement>(`[data-status="${asset}_${size}"]`);
+          const file = fileInput?.files?.[0];
+
+          if (!file) { setStatus(statusEl, 'Selecione um arquivo', 'err'); return; }
+          if (!modelId) return;
+
+          const origLabel = btn.textContent ?? 'Enviar';
+          setLoading(btn, true, origLabel);
+          setStatus(statusEl, '', '');
+          hideMsg(sizeMsg);
+
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('model_id', modelId);
+          fd.append('asset_type', asset);
+          fd.append('size', size);
+
+          try {
+            const res = await fetch('/api/admin/models/upload', { method: 'POST', body: fd });
+            setLoading(btn, false, origLabel);
+            if (res.ok) {
+              setStatus(statusEl, '\u2713 Enviado', 'ok');
+              if (fileInput) fileInput.value = '';
+            } else {
+              const err = await res.json().catch(() => ({})) as { error?: string };
+              setStatus(statusEl, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+            }
+          } catch {
+            setLoading(btn, false, origLabel);
+            setStatus(statusEl, 'Erro de rede', 'err');
+          }
+        });
+      });
+
+      // ── Edit panel open/close ──────────────────────────────────────────
+      function openEditPanel(btn: HTMLButtonElement) {
+        hideMsg(editMsg); hideMsg(kitMsg); hideMsg(sizeMsg);
+        setStatus(coverStatus, '', '');
+        editPanel.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach(i => { i.value = ''; });
+        editPanel.querySelectorAll<HTMLElement>('.upload-status').forEach(s => setStatus(s, '', ''));
+
+        editId.value          = btn.dataset.id ?? '';
+        editName.value        = btn.dataset.name ?? '';
+        editSubtitle.value    = btn.dataset.subtitle ?? '';
+        editDesc.value        = btn.dataset.description ?? '';
+        editOrder.value       = btn.dataset.sortOrder ?? '';
+        editIsActive.value    = btn.dataset.isActive ?? 'true';
+        editTag.value         = btn.dataset.tag ?? '';
+        editTagColor.value    = btn.dataset.tagColor ?? '#f59e0b';
+        editPanelId.textContent = btn.dataset.id ?? '';
+
+        const coverPath = btn.dataset.coverPath ?? '';
+        if (coverPath) {
+          coverPreview.src = `/images/${btn.dataset.id}/card.jpg`;
+          coverPreview.style.display = 'block';
+          coverPlaceholder.style.display = 'none';
+        } else {
+          coverPreview.style.display = 'none';
+          coverPlaceholder.style.display = 'flex';
+        }
+
+        try { loadColors(JSON.parse(btn.dataset.colors ?? '[]') as string[]); }
+        catch { loadColors([]); }
+
+        editPanel.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+        editPanel.querySelectorAll('.tab-pane').forEach((p, i) => p.classList.toggle('active', i === 0));
+        editPanel.classList.add('open');
+        editPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function closeEditPanel() { editPanel.classList.remove('open'); }
+      closeEditBtn.addEventListener('click', closeEditPanel);
+      cancelEditBtn.addEventListener('click', closeEditPanel);
+
+      // ── Save presentation ──────────────────────────────────────────────
+      saveEditBtn.addEventListener('click', async () => {
+        const id = editId.value;
+        if (!id) return;
+
+        setLoading(saveEditBtn, true, 'Salvar apresentação');
+        hideMsg(editMsg);
+
+        const colors = getColors();
+
+        try {
+          const res = await fetch('/api/admin/models/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              name:        editName.value.trim(),
+              subtitle:    editSubtitle.value.trim() || null,
+              description: editDesc.value.trim() || null,
+              sort_order:  editOrder.value !== '' ? Number(editOrder.value) : null,
+              is_active:   editIsActive.value === 'true',
+              colors:      colors.length > 0 ? colors : null,
+              tag:         editTag.value.trim() || null,
+              tag_color:   editTag.value.trim() ? editTagColor.value : null,
+            }),
+          });
+
+          setLoading(saveEditBtn, false, 'Salvar apresentação');
+
+          if (res.ok) {
+            showMsg(editMsg, 'Modelo atualizado com sucesso.', 'ok');
+            updateTableRow(id, {
+              name:      editName.value.trim(),
+              subtitle:  editSubtitle.value.trim(),
+              sortOrder: editOrder.value,
+              isActive:  editIsActive.value === 'true',
+              colors,
+              tag:       editTag.value.trim(),
+              tagColor:  editTagColor.value,
+            });
+            const row = modelsTbody.querySelector(`tr[data-model-id="${id}"]`);
+            const eb  = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) {
+              eb.dataset.name        = editName.value.trim();
+              eb.dataset.subtitle    = editSubtitle.value.trim();
+              eb.dataset.description = editDesc.value.trim();
+              eb.dataset.sortOrder   = editOrder.value;
+              eb.dataset.isActive    = editIsActive.value;
+              eb.dataset.tag         = editTag.value.trim();
+              eb.dataset.tagColor    = editTagColor.value;
+              eb.dataset.colors      = JSON.stringify(colors);
+            }
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            showMsg(editMsg, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(saveEditBtn, false, 'Salvar apresentação');
+          showMsg(editMsg, 'Erro de rede. Verifique a conexão.', 'err');
+        }
+      });
+
+      // ── Update table row ───────────────────────────────────────────────
+      function updateTableRow(id: string, data: {
+        name: string; subtitle: string; sortOrder: string;
+        isActive: boolean; colors: string[]; tag: string; tagColor: string;
+      }) {
+        const row = modelsTbody.querySelector(`tr[data-model-id="${id}"]`) as HTMLTableRowElement | null;
+        if (!row) return;
+        const cells = row.querySelectorAll('td');
+
+        // cells: [0]=cover [1]=id [2]=name/tag [3]=palette [4]=order [5]=status [6]=actions
+        if (cells[2]) {
+          cells[2].textContent = '';
+          const strong = document.createElement('strong');
+          strong.textContent = data.name;
+          cells[2].appendChild(strong);
+          if (data.subtitle) {
+            const sp = document.createElement('span');
+            sp.style.cssText = 'display:block;font-size:0.8rem;color:var(--color-muted);';
+            sp.textContent = data.subtitle;
+            cells[2].appendChild(sp);
+          }
+          if (data.tag) {
+            const tagEl = document.createElement('span');
+            tagEl.className = 'badge';
+            tagEl.style.cssText = `background:${data.tagColor}22;color:${data.tagColor};margin-top:2px;`;
+            tagEl.textContent = data.tag;
+            cells[2].appendChild(tagEl);
+          }
+        }
+
+        if (cells[3]) {
+          cells[3].textContent = '';
+          if (data.colors.length > 0) {
+            const sw = document.createElement('div');
+            sw.className = 'swatches';
+            data.colors.forEach(c => {
+              const s = document.createElement('div');
+              s.className = 'swatch';
+              s.style.background = c;
+              sw.appendChild(s);
+            });
+            cells[3].appendChild(sw);
+          } else {
+            cells[3].appendChild(makePlaceholderSpan());
+          }
+        }
+
+        if (cells[4]) cells[4].textContent = data.sortOrder !== '' ? data.sortOrder : '\u2014';
+
+        if (cells[5]) {
+          const badge = cells[5].querySelector('.badge') as HTMLElement | null;
+          if (badge) {
+            badge.textContent = data.isActive ? 'Ativo' : 'Inativo';
+            badge.className = `badge ${data.isActive ? 'active' : 'inactive'}`;
+          }
+        }
+
+        const toggleBtn = row.querySelector<HTMLButtonElement>('.toggle-btn');
+        if (toggleBtn) {
+          toggleBtn.textContent = data.isActive ? 'Desativar' : 'Ativar';
+          toggleBtn.dataset.isActive = String(data.isActive);
+        }
+      }
+
+      // ── Toggle ─────────────────────────────────────────────────────────
+      async function handleToggle(btn: HTMLButtonElement) {
+        const id = btn.dataset.id ?? '';
+        const currentlyActive = btn.dataset.isActive === 'true';
+        const origLabel = btn.textContent ?? '';
+
+        setLoading(btn, true, origLabel);
+        hideMsg(globalMsg);
+
+        try {
+          const res = await fetch('/api/admin/models/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, is_active: !currentlyActive }),
+          });
+
+          setLoading(btn, false, origLabel);
+
+          if (res.ok) {
+            const newActive = !currentlyActive;
+            btn.dataset.isActive = String(newActive);
+            btn.textContent = newActive ? 'Desativar' : 'Ativar';
+            const row = modelsTbody.querySelector(`tr[data-model-id="${id}"]`);
+            const badge = row?.querySelector('.badge') as HTMLElement | null;
+            if (badge) { badge.textContent = newActive ? 'Ativo' : 'Inativo'; badge.className = `badge ${newActive ? 'active' : 'inactive'}`; }
+            const eb = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) eb.dataset.isActive = String(newActive);
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            showMsg(globalMsg, 'Erro ao alterar status: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(btn, false, origLabel);
+          showMsg(globalMsg, 'Erro de rede. Verifique a conexão.', 'err');
+        }
+      }
+
+      // ── Create ─────────────────────────────────────────────────────────
+      createBtn.addEventListener('click', async () => {
+        const id = createId.value.trim();
+        if (!id) { showMsg(createMsg, 'O campo ID (slug) é obrigatório.', 'err'); createId.focus(); return; }
+        const name = createName.value.trim();
+        if (!name) { showMsg(createMsg, 'O campo Nome é obrigatório.', 'err'); createName.focus(); return; }
+
+        setLoading(createBtn, true, 'Criar modelo');
+        hideMsg(createMsg);
+
+        try {
+          const res = await fetch('/api/admin/models/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              name,
+              subtitle:    createSubtitle.value.trim() || null,
+              description: createDesc.value.trim() || 'Sem descri\u00e7\u00e3o.',
+              sort_order:  createOrder.value !== '' ? Number(createOrder.value) : 0,
+            }),
+          });
+
+          setLoading(createBtn, false, 'Criar modelo');
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            showMsg(createMsg, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+            return;
+          }
+
+          const { model } = await res.json() as { ok: boolean; model: {
+            id: string; name: string; subtitle: string | null; description: string | null;
+            sort_order: number | null; is_active: boolean;
+          }};
+
+          showMsg(createMsg, 'Modelo criado! Use \u201cEditar\u201d para adicionar imagem, cores e arquivos.', 'ok');
+          createId.value = ''; createName.value = ''; createSubtitle.value = '';
+          createDesc.value = ''; createOrder.value = '0';
+
+          // Append new row
+          const tr = document.createElement('tr');
+          tr.dataset.modelId = model.id;
+
+          const tdCover = document.createElement('td');
+          const ph = document.createElement('div');
+          ph.className = 'cover-placeholder';
+          ph.textContent = 'sem foto';
+          tdCover.appendChild(ph);
+
+          const tdId = document.createElement('td');
+          tdId.style.cssText = 'font-size:0.78rem;color:var(--color-muted);font-family:monospace;';
+          tdId.textContent = model.id;
+
+          const tdName = document.createElement('td');
+          const strong = document.createElement('strong');
+          strong.textContent = model.name;
+          tdName.appendChild(strong);
+          if (model.subtitle) {
+            const sp = document.createElement('span');
+            sp.style.cssText = 'display:block;font-size:0.8rem;color:var(--color-muted);';
+            sp.textContent = model.subtitle;
+            tdName.appendChild(sp);
+          }
+
+          const tdPalette = document.createElement('td');
+          tdPalette.appendChild(makePlaceholderSpan());
+
+          const tdOrder = document.createElement('td');
+          tdOrder.textContent = model.sort_order != null ? String(model.sort_order) : '\u2014';
+
+          const tdStatus = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.className = `badge ${model.is_active ? 'active' : 'inactive'}`;
+          badge.textContent = model.is_active ? 'Ativo' : 'Inativo';
+          tdStatus.appendChild(badge);
+
+          const tdActions = document.createElement('td');
+          const ac = document.createElement('div');
+          ac.className = 'action-cell';
+
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn-sm edit-btn';
+          editBtn.textContent = 'Editar';
+          Object.assign(editBtn.dataset, {
+            id: model.id, name: model.name, subtitle: model.subtitle ?? '',
+            description: model.description ?? '', sortOrder: model.sort_order != null ? String(model.sort_order) : '',
+            isActive: String(model.is_active), coverPath: '', colors: '[]', tag: '', tagColor: '#f59e0b',
+          });
+
+          const toggleBtn = document.createElement('button');
+          toggleBtn.className = 'btn-sm toggle-btn';
+          toggleBtn.textContent = model.is_active ? 'Desativar' : 'Ativar';
+          toggleBtn.dataset.id = model.id;
+          toggleBtn.dataset.isActive = String(model.is_active);
+
+          ac.appendChild(editBtn); ac.appendChild(toggleBtn);
+          tdActions.appendChild(ac);
+
+          tr.appendChild(tdCover); tr.appendChild(tdId); tr.appendChild(tdName);
+          tr.appendChild(tdPalette); tr.appendChild(tdOrder);
+          tr.appendChild(tdStatus); tr.appendChild(tdActions);
+
+          modelsTbody.appendChild(tr);
+          attachRowListeners(tr);
+        } catch {
+          setLoading(createBtn, false, 'Criar modelo');
+          showMsg(createMsg, 'Erro de rede. Verifique a conexão.', 'err');
+        }
+      });
+
+      // ── Row listeners ──────────────────────────────────────────────────
+      function attachRowListeners(row: HTMLTableRowElement) {
+        row.querySelector<HTMLButtonElement>('.edit-btn')?.addEventListener('click', e => {
+          openEditPanel(e.currentTarget as HTMLButtonElement);
+        });
+        row.querySelector<HTMLButtonElement>('.toggle-btn')?.addEventListener('click', e => {
+          void handleToggle(e.currentTarget as HTMLButtonElement);
+        });
+      }
+
+      modelsTbody.querySelectorAll('tr').forEach(tr => attachRowListeners(tr as HTMLTableRowElement));
+    })();
+  </script>
+</AdminLayout>

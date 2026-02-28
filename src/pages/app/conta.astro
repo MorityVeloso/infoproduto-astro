@@ -1,0 +1,164 @@
+---
+export const prerender = false;
+
+const user = Astro.locals.user!;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minha Conta — Quarto de Bebê</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg:        #1c2a3a;
+        --surface:   #253447;
+        --card:      rgba(37,52,71,0.95);
+        --border:    rgba(255,255,255,0.13);
+        --text:      #f8fafc;
+        --muted:     #a8bfd4;
+        --green:     #22c55e;
+        --green-hover:#16a34a;
+        --red:       #ef4444;
+        --serif:     'Lora', Georgia, serif;
+        --sans:      'DM Sans', system-ui, sans-serif;
+        --radius:    12px;
+      }
+
+      html, body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Nav ── */
+      nav {
+        position: sticky; top: 0; z-index: 50;
+        background: rgba(15,23,42,0.85);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+      }
+      .nav-inner {
+        max-width: 960px; margin: 0 auto;
+        padding: 0 1.5rem; height: 60px;
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .nav-brand { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; color: var(--text); text-decoration: none; }
+      .nav-links { display: flex; align-items: center; gap: 1.5rem; }
+      .nav-links a { font-size: 0.85rem; color: var(--muted); text-decoration: none; font-weight: 500; transition: color 0.2s; }
+      .nav-links a:hover { color: var(--text); }
+      .nav-logout { font-size: 0.85rem; color: var(--muted); background: none; border: none; cursor: pointer; font-family: var(--sans); font-weight: 500; transition: color 0.2s; padding: 0; }
+      .nav-logout:hover { color: var(--red); }
+
+      /* ── Layout ── */
+      main { max-width: 600px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+
+      /* ── Greeting ── */
+      .greeting { margin-bottom: 2.5rem; }
+      .greeting h1 { font-family: var(--serif); font-size: clamp(1.75rem, 4vw, 2.25rem); font-weight: 600; margin-bottom: 0.5rem; }
+      .greeting p  { font-size: 0.9rem; color: var(--muted); }
+      .greeting strong { color: var(--text); font-weight: 500; }
+      .badge {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+        color: var(--green); border-radius: 999px;
+        font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em;
+        padding: 0.25rem 0.75rem; margin-top: 0.75rem;
+      }
+      .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+      /* ── Card ── */
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 2rem;
+        backdrop-filter: blur(8px);
+      }
+
+      /* ── Field ── */
+      .field { display: flex; flex-direction: column; gap: 0.5rem; }
+      .field label { font-size: 0.8rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+      .field input {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 0.95rem;
+        cursor: not-allowed;
+        outline: none;
+      }
+      .field .hint { font-size: 0.8rem; color: var(--muted); opacity: 0.7; }
+
+      /* ── Divider ── */
+      hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+      /* ── Actions ── */
+      .actions { display: flex; justify-content: flex-end; }
+      .btn-back {
+        font-size: 0.875rem; font-weight: 500; font-family: var(--sans);
+        color: var(--muted); background: none; border: none;
+        cursor: pointer; text-decoration: none;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        transition: color 0.2s, background 0.2s;
+      }
+      .btn-back:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="nav-inner">
+        <a class="nav-brand" href="/app">Quarto de Bebê</a>
+        <div class="nav-links">
+          <a href="/app">Início</a>
+          <a href="/app/kit">Downloads</a>
+          <button class="nav-logout" id="logout-btn">Sair</button>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <div class="greeting">
+        <h1>Minha Conta</h1>
+        <p>Logado como <strong>{user.email}</strong></p>
+        <span class="badge">Conta ativa</span>
+      </div>
+
+      <div class="card">
+        <div class="field">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" value={user.email} disabled />
+          <span class="hint">O e-mail não pode ser alterado aqui.</span>
+        </div>
+
+        <hr />
+
+        <div class="actions">
+          <a class="btn-back" href="/app">← Voltar</a>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      import { createBrowserClient } from '../../lib/supabase/browser';
+
+      document.getElementById('logout-btn')!.addEventListener('click', async () => {
+        const supabase = createBrowserClient();
+        await supabase.auth.signOut();
+        window.location.href = '/login';
+      });
+    </script>
+  </body>
+</html>

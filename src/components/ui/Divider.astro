@@ -1,0 +1,26 @@
+---
+interface Props {
+  class?: string;
+  ornament?: boolean;
+}
+
+const { class: className = '', ornament = false } = Astro.props;
+---
+
+{ornament ? (
+  <div
+    style="display: flex; align-items: center; gap: 1rem; margin: 2rem 0;"
+    class={className}
+    role="separator"
+    aria-hidden="true"
+  >
+    <div style="flex: 1; height: 1px; background: var(--color-border);"></div>
+    <span style="color: var(--color-border); font-size: 1rem;">◇</span>
+    <div style="flex: 1; height: 1px; background: var(--color-border);"></div>
+  </div>
+) : (
+  <hr
+    style="border: none; border-top: 1px solid var(--color-border); margin: 2rem 0;"
+    class={className}
+  />
+)}

@@ -1,0 +1,241 @@
+---
+// src/pages/admin/images.astro
+export const prerender = false;
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { requireAdmin } from '../../lib/require-admin';
+import { createAdminClient } from '../../lib/supabase/admin';
+
+const result = await requireAdmin(Astro.request);
+if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
+const { profile } = result;
+
+const SUPABASE_URL = import.meta.env.PUBLIC_SUPABASE_URL as string;
+
+const admin = createAdminClient();
+const { data: rows = [] } = await admin
+  .from('site_settings')
+  .select('key, value')
+  .in('key', ['hero_image', 'architect_image', 'kit_image']);
+
+const settings: Record<string, string> = {};
+for (const row of rows ?? []) {
+  settings[(row as { key: string; value: string }).key] = (row as { key: string; value: string }).value;
+}
+
+function imageUrl(key: string): string | null {
+  const val = settings[key];
+  if (!val) return null;
+  return `${SUPABASE_URL}/storage/v1/object/public/site-images/${val}`;
+}
+
+const slots = [
+  {
+    key: 'hero_image',
+    label: 'Imagem Principal (Hero)',
+    description: 'Foto exibida na seção inicial da landing page, ao lado do título.',
+    fallback: '/images/safari/hero.jpg',
+  },
+  {
+    key: 'architect_image',
+    label: 'Foto da Arquiteta',
+    description: 'Foto exibida na seção "Quem está por trás".',
+    fallback: null,
+  },
+  {
+    key: 'kit_image',
+    label: 'Imagem do Kit (Segurança)',
+    description: 'Foto exibida na seção "Montar com segurança".',
+    fallback: null,
+  },
+] as const;
+---
+
+<AdminLayout title="Imagens — Admin" email={profile.email}>
+  <style>
+    .page-header       { margin-bottom: 2rem; }
+    .page-title        { font-size: 1.5rem; font-weight: 700; color: var(--color-text); margin: 0 0 0.3rem; }
+    .page-subtitle     { color: var(--color-muted); font-size: 0.9rem; margin: 0; }
+
+    .slots-grid        { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
+
+    .slot-card         { background: var(--color-card); border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; }
+    .slot-preview      { position: relative; aspect-ratio: 4/3; background: var(--color-surface); overflow: hidden; }
+    .slot-preview img  { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .slot-preview-empty {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.5rem; color: var(--color-muted); font-size: 0.85rem;
+    }
+    .slot-preview-empty svg { opacity: 0.4; }
+
+    .slot-overlay      {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .slot-preview:hover .slot-overlay { opacity: 1; }
+
+    .slot-body         { padding: 1.1rem 1.25rem 1.25rem; }
+    .slot-label        { font-weight: 600; color: var(--color-text); font-size: 0.95rem; margin: 0 0 0.25rem; }
+    .slot-desc         { color: var(--color-muted); font-size: 0.82rem; margin: 0 0 1rem; line-height: 1.4; }
+
+    .upload-row        { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    .file-label        {
+      flex: 1; min-width: 0;
+      padding: 0.45rem 0.75rem; border-radius: 6px;
+      border: 1px dashed var(--color-border); background: var(--color-surface);
+      color: var(--color-muted); font-size: 0.82rem;
+      cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: border-color 0.15s;
+    }
+    .file-label:hover  { border-color: #22c55e; color: var(--color-text); }
+    .file-input        { display: none; }
+
+    .btn-upload        {
+      padding: 0.45rem 1rem; border-radius: 6px; border: none;
+      background: #22c55e; color: #fff; cursor: pointer;
+      font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .btn-upload:hover    { background: #16a34a; }
+    .btn-upload:disabled { opacity: 0.5; cursor: default; }
+
+    .status-msg        { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.1rem; }
+    .status-msg.ok     { color: #4ade80; }
+    .status-msg.err    { color: #f87171; }
+  </style>
+
+  <div class="page-header">
+    <h1 class="page-title">Imagens da Landing Page</h1>
+    <p class="page-subtitle">Faça upload para substituir as imagens exibidas na página principal.</p>
+  </div>
+
+  <div class="slots-grid">
+    {slots.map(slot => {
+      const currentUrl = imageUrl(slot.key);
+      return (
+        <div class="slot-card" id={`card-${slot.key}`}>
+          <div class="slot-preview">
+            {currentUrl ? (
+              <img src={currentUrl} alt={slot.label} id={`preview-${slot.key}`} />
+            ) : slot.fallback ? (
+              <img src={slot.fallback} alt={slot.label} id={`preview-${slot.key}`} />
+            ) : (
+              <div class="slot-preview-empty" id={`preview-${slot.key}`}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <path d="M21 15l-5-5L5 21"/>
+                </svg>
+                <span>Sem imagem</span>
+              </div>
+            )}
+            <div class="slot-overlay">
+              <span style="color:#fff;font-size:0.8rem;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.5)">
+                Clique abaixo para alterar
+              </span>
+            </div>
+          </div>
+
+          <div class="slot-body">
+            <p class="slot-label">{slot.label}</p>
+            <p class="slot-desc">{slot.description}</p>
+
+            <div class="upload-row">
+              <label class="file-label" id={`file-label-${slot.key}`} for={`file-${slot.key}`}>
+                Escolher arquivo…
+              </label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                class="file-input"
+                id={`file-${slot.key}`}
+                data-key={slot.key}
+              />
+              <button
+                class="btn-upload"
+                id={`btn-${slot.key}`}
+                data-key={slot.key}
+                disabled
+              >
+                Enviar
+              </button>
+            </div>
+            <p class="status-msg" id={`status-${slot.key}`}></p>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+
+  <script>
+    document.querySelectorAll<HTMLInputElement>('.file-input').forEach(input => {
+      const key   = input.dataset.key!;
+      const label = document.getElementById(`file-label-${key}`) as HTMLLabelElement;
+      const btn   = document.getElementById(`btn-${key}`) as HTMLButtonElement;
+
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (file) {
+          label.textContent = file.name;
+          btn.disabled = false;
+        } else {
+          label.textContent = 'Escolher arquivo…';
+          btn.disabled = true;
+        }
+      });
+
+      btn.addEventListener('click', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+
+        const status = document.getElementById(`status-${key}`)!;
+        btn.disabled = true;
+        status.className = 'status-msg';
+        status.textContent = 'Enviando…';
+
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('key', key);
+
+        try {
+          const res  = await fetch('/api/admin/site-settings/upload', { method: 'POST', body: fd });
+          const json = await res.json() as { ok?: boolean; url?: string; error?: string };
+
+          if (!res.ok || !json.ok) {
+            status.className = 'status-msg err';
+            status.textContent = json.error ?? 'Erro ao enviar.';
+            btn.disabled = false;
+            return;
+          }
+
+          // Update preview
+          const previewEl = document.getElementById(`preview-${key}`);
+          if (previewEl) {
+            if (previewEl.tagName === 'IMG') {
+              (previewEl as HTMLImageElement).src = json.url! + '?t=' + Date.now();
+            } else {
+              const img = document.createElement('img');
+              img.src = json.url! + '?t=' + Date.now();
+              img.alt = key;
+              img.id  = `preview-${key}`;
+              previewEl.replaceWith(img);
+            }
+          }
+
+          status.className = 'status-msg ok';
+          status.textContent = 'Imagem atualizada com sucesso!';
+          label.textContent = 'Escolher arquivo…';
+          input.value = '';
+          btn.disabled = true;
+        } catch {
+          status.className = 'status-msg err';
+          status.textContent = 'Erro de rede. Tente novamente.';
+          btn.disabled = false;
+        }
+      });
+    });
+  </script>
+</AdminLayout>

@@ -1,0 +1,261 @@
+---
+export const prerender = false;
+
+const redirect    = Astro.url.searchParams.get('redirect') ?? '/app';
+const callbackUrl = `${Astro.url.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar — Quarto de Bebê</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --qb-dark:         #0F172A;
+        --qb-dark-surface: #1E293B;
+        --qb-cta:          #22C55E;
+        --qb-urgency:      #EF4444;
+        --qb-muted-light:  #94A3B8;
+        --qb-serif:        'Lora', Georgia, serif;
+        --qb-sans:         'DM Sans', system-ui, sans-serif;
+        --qb-shadow-cta:   0 4px 25px rgba(34, 197, 94, 0.4);
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--qb-dark);
+        font-family: var(--qb-sans);
+        padding: 1.5rem;
+        color: #fff;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div style="width: 100%; max-width: 400px;">
+
+      <!-- Brand -->
+      <div style="text-align: center; margin-bottom: 2.5rem;">
+        <a href="/" style="text-decoration: none;">
+          <span style="font-family: var(--qb-serif); font-size: 1.5rem; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
+            Quarto de Bebê
+          </span>
+        </a>
+      </div>
+
+      <!-- Card -->
+      <div style="background: var(--qb-dark-surface); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 2.5rem;">
+
+        <h1 style="font-family: var(--qb-serif); font-size: 1.5rem; font-weight: 700; color: #fff; text-align: center; margin-bottom: 0.5rem;">
+          Acessar minha conta
+        </h1>
+        <p style="font-size: 0.875rem; color: var(--qb-muted-light); text-align: center; margin-bottom: 2rem; line-height: 1.5;">
+          Enviaremos um link de acesso para o seu e-mail.
+        </p>
+
+        <!-- Divider -->
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.75rem;">
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.06);"></div>
+          <span style="font-size: 0.7rem; color: var(--qb-muted-light); letter-spacing: 0.1em; text-transform: uppercase;">acesso</span>
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.06);"></div>
+        </div>
+
+        <!-- Estado: idle -->
+        <div id="state-idle">
+          <form id="login-form">
+            <input type="hidden" id="callback-url" value={callbackUrl} />
+
+            <div style="display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1.25rem;">
+              <label for="email" style="font-size: 0.85rem; font-weight: 600; color: #fff; letter-spacing: 0.01em;">
+                E-mail
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="seu@email.com"
+                required
+                autocomplete="email"
+                style="
+                  width: 100%;
+                  padding: 0.625rem 0.875rem;
+                  border-radius: 8px;
+                  border: 1.5px solid rgba(255,255,255,0.1);
+                  background: rgba(255,255,255,0.04);
+                  color: #fff;
+                  font-family: var(--qb-sans);
+                  font-size: 0.95rem;
+                  outline: none;
+                  transition: border-color 0.2s, box-shadow 0.2s;
+                "
+                onfocus="this.style.borderColor='var(--qb-cta)'; this.style.boxShadow='0 0 0 3px rgba(34,197,94,0.12)'"
+                onblur="this.style.borderColor='rgba(255,255,255,0.1)'; this.style.boxShadow='none'"
+              />
+            </div>
+
+            <p id="error-msg" role="alert" style="display: none; font-size: 0.8rem; color: var(--qb-urgency); margin-bottom: 1rem;"></p>
+
+            <button
+              id="submit-btn"
+              type="submit"
+              style="
+                width: 100%;
+                padding: 0.75rem 1.5rem;
+                background: var(--qb-cta);
+                color: #fff;
+                border: none;
+                border-radius: 8px;
+                font-family: var(--qb-sans);
+                font-size: 0.875rem;
+                font-weight: 700;
+                letter-spacing: 0.03em;
+                text-transform: uppercase;
+                cursor: pointer;
+                box-shadow: var(--qb-shadow-cta);
+                transition: transform 0.15s, opacity 0.15s;
+              "
+              onmouseover="this.style.transform='scale(1.01)'"
+              onmouseout="this.style.transform='scale(1)'"
+            >
+              ENVIAR LINK DE ACESSO
+            </button>
+          </form>
+        </div>
+
+        <!-- Estado: loading -->
+        <div id="state-loading" style="display: none; text-align: center; padding: 1rem 0;">
+          <div style="
+            width: 32px; height: 32px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top-color: var(--qb-cta);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+          "></div>
+          <p style="font-size: 0.875rem; color: var(--qb-muted-light);">Enviando...</p>
+        </div>
+
+        <!-- Estado: success -->
+        <div id="state-success" style="display: none; text-align: center; padding: 1rem 0;">
+          <div style="
+            width: 48px; height: 48px;
+            background: rgba(34,197,94,0.1);
+            border: 1.5px solid var(--qb-cta);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.25rem;
+          ">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+            </svg>
+          </div>
+          <h2 style="font-family: var(--qb-serif); font-size: 1.125rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem;">
+            Pronto!
+          </h2>
+          <p style="font-size: 0.875rem; color: var(--qb-muted-light); line-height: 1.6;">
+            Verifique seu e-mail para acessar.<br />
+            O link expira em 1 hora.
+          </p>
+          <button
+            id="resend-btn"
+            type="button"
+            style="
+              margin-top: 1.5rem;
+              background: transparent; border: none;
+              color: var(--qb-cta);
+              font-family: var(--qb-sans);
+              font-size: 0.8rem;
+              font-weight: 600;
+              cursor: pointer;
+              text-decoration: underline;
+            "
+          >
+            Reenviar link
+          </button>
+        </div>
+
+      </div><!-- /card -->
+
+      <p style="text-align: center; margin-top: 1.5rem; font-size: 0.8rem;">
+        <a
+          href="/"
+          style="color: var(--qb-muted-light); text-decoration: none; transition: color 0.2s;"
+          onmouseover="this.style.color='#fff'"
+          onmouseout="this.style.color='var(--qb-muted-light)'"
+        >← Voltar para o site</a>
+      </p>
+
+    </div><!-- /wrapper -->
+
+    <script>
+      import { createBrowserClient } from '../lib/supabase/browser';
+
+      const form       = document.getElementById('login-form') as HTMLFormElement;
+      const emailInput = document.getElementById('email') as HTMLInputElement;
+      const errorMsg   = document.getElementById('error-msg') as HTMLParagraphElement;
+      const submitBtn  = document.getElementById('submit-btn') as HTMLButtonElement;
+      const resendBtn  = document.getElementById('resend-btn') as HTMLButtonElement;
+      const cbUrl      = (document.getElementById('callback-url') as HTMLInputElement).value;
+
+      const stateIdle    = document.getElementById('state-idle')!;
+      const stateLoading = document.getElementById('state-loading')!;
+      const stateSuccess = document.getElementById('state-success')!;
+
+      function showState(state: 'idle' | 'loading' | 'success') {
+        stateIdle.style.display    = state === 'idle'    ? 'block' : 'none';
+        stateLoading.style.display = state === 'loading' ? 'block' : 'none';
+        stateSuccess.style.display = state === 'success' ? 'block' : 'none';
+      }
+
+      function showError(msg: string) {
+        errorMsg.textContent   = msg;
+        errorMsg.style.display = 'block';
+        submitBtn.disabled     = false;
+      }
+
+      async function sendMagicLink(email: string) {
+        showState('loading');
+        errorMsg.style.display = 'none';
+
+        const supabase = createBrowserClient();
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: cbUrl },
+        });
+
+        if (error) {
+          showState('idle');
+          showError(error.message ?? 'Não foi possível enviar o link. Tente novamente.');
+          return;
+        }
+
+        showState('success');
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        await sendMagicLink(emailInput.value.trim());
+      });
+
+      resendBtn.addEventListener('click', async () => {
+        showState('idle');
+        await sendMagicLink(emailInput.value.trim());
+      });
+    </script>
+  </body>
+</html>

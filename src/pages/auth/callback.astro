@@ -1,0 +1,97 @@
+---
+export const prerender = false;
+
+// Parâmetro ?redirect passado pelo login.astro via emailRedirectTo
+const redirectTo = Astro.url.searchParams.get('redirect') ?? '/app';
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verificando acesso…</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      :root {
+        --color-bg:      #faf9f6;
+        --color-surface: #f2ede4;
+        --color-accent2: #9c7e5f;
+        --color-text:    #3a3632;
+        --color-muted:   #9b9690;
+        --color-border:  #e2dbd0;
+        --font-sans:     "Inter", system-ui, sans-serif;
+      }
+      body {
+        min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--color-bg);
+        font-family: var(--font-sans);
+        color: var(--color-text);
+      }
+      .spinner {
+        width: 40px; height: 40px;
+        border: 2px solid var(--color-border);
+        border-top-color: var(--color-accent2);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="callback-root" data-redirect={redirectTo} style="text-align: center;">
+      <div class="spinner" style="margin: 0 auto 1.25rem;"></div>
+      <p id="status-msg" style="font-size: 0.875rem; color: var(--color-muted);">Verificando acesso…</p>
+    </div>
+
+    <script>
+      import { createBrowserClient } from '../../lib/supabase/browser';
+      import { syncSessionToCookies } from '../../lib/session';
+
+      const redirectTo = (document.getElementById('callback-root') as HTMLElement).dataset.redirect ?? '/app';
+
+      const statusMsg = document.getElementById('status-msg');
+
+      async function handleCallback() {
+        const supabase = createBrowserClient();
+        const params   = new URLSearchParams(window.location.search);
+        const hash     = new URLSearchParams(window.location.hash.slice(1));
+
+        // ── Caminho 1: PKCE — Supabase envia ?code= na URL ──
+        const code = params.get('code');
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error || !data.session) {
+            statusMsg.textContent = 'Link inválido ou expirado. Tente novamente.';
+            setTimeout(() => { window.location.href = '/login'; }, 2500);
+            return;
+          }
+          syncSessionToCookies(data.session);
+          window.location.replace(redirectTo);
+          return;
+        }
+
+        // ── Caminho 2: Implicit — Supabase envia #access_token= no hash ──
+        const accessToken = hash.get('access_token');
+        if (accessToken) {
+          const { data, error } = await supabase.auth.getSession();
+          if (error || !data.session) {
+            statusMsg.textContent = 'Link inválido ou expirado. Tente novamente.';
+            setTimeout(() => { window.location.href = '/login'; }, 2500);
+            return;
+          }
+          syncSessionToCookies(data.session);
+          window.location.replace(redirectTo);
+          return;
+        }
+
+        // ── Nenhum parâmetro encontrado ──
+        statusMsg.textContent = 'Parâmetros inválidos. Redirecionando…';
+        setTimeout(() => { window.location.href = '/login'; }, 2000);
+      }
+
+      handleCallback();
+    </script>
+  </body>
+</html>

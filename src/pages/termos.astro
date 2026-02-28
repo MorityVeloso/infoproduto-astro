@@ -1,0 +1,118 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+---
+
+<LandingLayout
+  title="Termos de Uso — Quarto de Bebê"
+  description="Leia os termos e condições de uso da plataforma Quarto de Bebê."
+>
+  <div style="background: var(--qb-dark); min-height: 100vh; font-family: var(--qb-sans);">
+
+    {/* Header simples */}
+    <header style="border-bottom: 1px solid rgba(255,255,255,0.06); padding: 1.25rem 1.5rem;">
+      <div style="max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;">
+        <a href="/" style="display: flex; align-items: center; gap: 0.75rem; text-decoration: none;">
+          <div style="width: 36px; height: 36px; border-radius: 8px; background: #16a34a; display: flex; align-items: center; justify-content: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 21h18M3 7v14M21 7v14M6 7V4h12v3M9 21v-4a3 3 0 016 0v4"/>
+            </svg>
+          </div>
+          <span style="font-family: var(--qb-serif); font-size: 1.25rem; font-weight: 700; color: #fff;">Quarto de Bebê</span>
+        </a>
+        <a href="/" style="font-size: 0.875rem; color: #64748b; text-decoration: none;">← Voltar</a>
+      </div>
+    </header>
+
+    {/* Conteúdo */}
+    <main style="max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem 5rem;">
+
+      <p style="font-size: 0.8rem; color: #475569; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.08em;">Documento legal</p>
+      <h1 style="font-family: var(--qb-serif); font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; color: #fff; margin-bottom: 0.5rem; line-height: 1.2;">
+        Termos de Uso
+      </h1>
+      <p style="color: #475569; font-size: 0.875rem; margin-bottom: 3rem;">Última atualização: fevereiro de 2026</p>
+
+      <div style="color: #94a3b8; line-height: 1.8; font-size: 0.95rem;">
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">1. Aceitação dos Termos</h2>
+          <p>Ao acessar e utilizar a plataforma <strong style="color: #e2e8f0;">Quarto de Bebê</strong> (quartodebb.com.br), você declara ter lido, compreendido e concordado com estes Termos de Uso. Caso não concorde com qualquer disposição, não utilize nossos serviços.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">2. Sobre o Serviço</h2>
+          <p style="margin-bottom: 1rem;">O Quarto de Bebê oferece kits digitais de projeto de arquitetura para quartos infantis, compostos por:</p>
+          <ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+            {['Planta baixa técnica em formato digital', 'Renders e imagens 3D ultrarrealistas', 'Lista de compras com referências de produtos', 'Guia de implementação'].map(item => (
+              <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <span style="color: #22c55e; margin-top: 0.1rem; flex-shrink: 0;">✓</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">3. Licença de Uso</h2>
+          <p style="margin-bottom: 1rem;">Ao adquirir um kit, você recebe uma <strong style="color: #e2e8f0;">licença pessoal, intransferível e não exclusiva</strong> para uso do material adquirido, exclusivamente para fins pessoais e não comerciais.</p>
+          <p>É expressamente proibido:</p>
+          <ul style="list-style: none; padding: 0; margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            {[
+              'Revender, redistribuir ou compartilhar os arquivos digitais',
+              'Utilizar o conteúdo para fins comerciais sem autorização prévia',
+              'Remover marcas d\'água ou atribuições de autoria',
+              'Modificar e redistribuir o material como se fosse de sua autoria',
+            ].map(item => (
+              <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <span style="color: #ef4444; margin-top: 0.1rem; flex-shrink: 0;">✕</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">4. Pagamento e Acesso</h2>
+          <p style="margin-bottom: 1rem;">O pagamento é processado de forma segura pela plataforma <strong style="color: #e2e8f0;">Asaas</strong>. Após a confirmação do pagamento, você receberá por e-mail um link de acesso ao material adquirido.</p>
+          <p>O acesso é disponibilizado por prazo indeterminado para uso pessoal, conforme a licença concedida.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">5. Política de Reembolso</h2>
+          <p style="margin-bottom: 1rem;">Por se tratar de produto digital com entrega imediata, não realizamos reembolso após o acesso ao material. Caso enfrente dificuldades técnicas de acesso, entre em contato conosco em até 7 dias corridos após a compra.</p>
+          <p>Em conformidade com o <strong style="color: #e2e8f0;">Código de Defesa do Consumidor (Art. 49)</strong>, o direito de arrependimento se aplica apenas a compras realizadas fora do estabelecimento comercial virtual, antes do acesso ao conteúdo digital.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">6. Propriedade Intelectual</h2>
+          <p>Todos os projetos, imagens, textos e demais conteúdos disponibilizados na plataforma são de propriedade exclusiva do Quarto de Bebê ou de seus licenciantes, protegidos pela legislação brasileira de direitos autorais (Lei nº 9.610/98).</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">7. Limitação de Responsabilidade</h2>
+          <p>Os projetos fornecidos são de natureza orientativa. O Quarto de Bebê não se responsabiliza por eventuais adaptações necessárias às condições específicas do imóvel do usuário, nem pela execução da obra. Recomendamos sempre consultar um profissional habilitado para a execução.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">8. Alterações nos Termos</h2>
+          <p>Reservamos o direito de alterar estes Termos de Uso a qualquer momento. As alterações entram em vigor na data de sua publicação. O uso continuado da plataforma após a publicação implica na aceitação dos novos termos.</p>
+        </section>
+
+        <section style="margin-bottom: 2.5rem;">
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">9. Foro e Legislação</h2>
+          <p>Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de domicílio do usuário para dirimir quaisquer disputas decorrentes deste instrumento, conforme o Código de Defesa do Consumidor.</p>
+        </section>
+
+        <section>
+          <h2 style="font-family: var(--qb-serif); font-size: 1.25rem; color: #e2e8f0; font-weight: 600; margin-bottom: 1rem;">10. Contato</h2>
+          <p>Para dúvidas sobre estes Termos, entre em contato:</p>
+          <a href="mailto:contato@quartosdebebe.com.br" style="display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; color: #4ade80; text-decoration: none; font-weight: 500;">
+            contato@quartosdebebe.com.br
+          </a>
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+</LandingLayout>

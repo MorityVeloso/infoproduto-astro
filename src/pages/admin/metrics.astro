@@ -1,0 +1,320 @@
+---
+export const prerender = false;
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { requireAdmin } from '../../lib/require-admin';
+import { createAdminClient } from '../../lib/supabase/admin';
+import { computeSummary, computeTimeseries, computeBreakdown, computeFunnel } from '../../lib/metrics';
+
+const result = await requireAdmin(Astro.request);
+if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
+const { profile } = result;
+
+const DAYS = 30;
+const since = new Date(Date.now() - DAYS * 86_400_000).toISOString();
+const admin = createAdminClient();
+
+// Summary data (all paid + refunded, all time)
+const { data: allOrders } = await admin
+  .from('orders')
+  .select('status, paid_at, amount_total, selected_model, selected_size, created_at')
+  .in('status', ['paid', 'refunded']);
+
+// Timeseries data (paid in last DAYS)
+const { data: tsOrders } = await admin
+  .from('orders')
+  .select('paid_at, amount_total')
+  .eq('status', 'paid')
+  .gte('paid_at', since);
+
+// Breakdown data (paid in last DAYS)
+const { data: bdOrders } = await admin
+  .from('orders')
+  .select('selected_model, selected_size')
+  .eq('status', 'paid')
+  .gte('paid_at', since);
+
+// Models for name resolution
+const { data: modelsData } = await admin.from('models').select('id, name');
+const modelNames = Object.fromEntries(
+  (modelsData ?? []).map((m: { id: string; name: string }) => [m.id, m.name]),
+);
+
+// Funnel: events (may not exist)
+const { data: evData, error: evError } = await admin
+  .from('events')
+  .select('event, session_id')
+  .gte('created_at', since);
+
+// A/B Test: events by variant
+const { data: abEventsRaw } = await admin
+  .from('events')
+  .select('event_name, variant')
+  .in('event_name', ['view_landing', 'click_cta', 'view_checkout', 'purchase_confirmed'])
+  .not('variant', 'is', null)
+  .gte('created_at', since);
+
+const tableExists = !evError || !evError.message.includes('does not exist');
+const events = (tableExists ? evData ?? [] : []) as { event: string; session_id: string | null }[];
+
+// Paid orders count for funnel
+const { data: paidCountData } = await admin
+  .from('orders')
+  .select('id')
+  .eq('status', 'paid')
+  .gte('paid_at', since);
+
+// Aggregate
+const now         = new Date();
+const summary     = computeSummary(allOrders ?? [], modelNames, now);
+const timeseries  = computeTimeseries(
+  (tsOrders ?? []).filter(r => r.paid_at) as { paid_at: string; amount_total: number }[],
+  DAYS,
+  now,
+);
+const breakdown   = computeBreakdown(bdOrders ?? [], modelNames);
+const funnel      = computeFunnel(events, paidCountData?.length ?? 0);
+
+// A/B aggregation
+interface AbStats { views: number; clicks: number; checkouts: number; purchases: number; }
+const makeEmpty = (): AbStats => ({ views: 0, clicks: 0, checkouts: 0, purchases: 0 });
+const abStats: Record<string, AbStats> = { dark: makeEmpty(), white: makeEmpty() };
+
+for (const row of (abEventsRaw ?? []) as { event_name: string; variant: string }[]) {
+  const s = abStats[row.variant];
+  if (!s) continue;
+  if (row.event_name === 'view_landing')       s.views++;
+  else if (row.event_name === 'click_cta')     s.clicks++;
+  else if (row.event_name === 'view_checkout') s.checkouts++;
+  else if (row.event_name === 'purchase_confirmed') s.purchases++;
+}
+
+const abRate = (n: number, d: number) => d > 0 ? (n / d * 100).toFixed(1) + '%' : '—';
+const abVariants = ['dark', 'white'] as const;
+
+const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const pct = (rate: number) => (rate * 100).toFixed(1) + '%';
+
+const maxRevenue = Math.max(...timeseries.map(d => d.revenue), 1);
+---
+
+<AdminLayout title="Métricas — Admin" email={profile.email}>
+  <style>
+    .sec       { margin-bottom: 2.5rem; }
+    .sec-h     { font-family: var(--font-serif); font-size: 1.15rem; font-weight: 400; margin-bottom: 0.85rem;
+                 border-bottom: 1px solid var(--color-border); padding-bottom: 0.4rem; }
+    /* chips */
+    .chips     { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .chip      { background: var(--color-surface); border: 1px solid var(--color-border);
+                 border-radius: var(--radius-md); padding: 0.65rem 1rem; flex: 1 1 130px; min-width: 0; }
+    .chip-lbl  { font-size: 0.7rem; color: var(--color-muted); text-transform: uppercase;
+                 letter-spacing: 0.04em; margin-bottom: 0.2rem; }
+    .chip-val  { font-size: 1.2rem; font-family: var(--font-serif); }
+    /* bar chart */
+    .bar-wrap  { display: flex; align-items: flex-end; gap: 3px; height: 140px; overflow-x: auto; padding-bottom: 0.25rem; }
+    .bar-col   { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 18px; height: 100%; justify-content: flex-end; }
+    .bar-fill  { width: 100%; border-radius: 2px 2px 0 0; min-height: 2px; background: var(--color-accent); }
+    .bar-date  { font-size: 0.45rem; color: var(--color-muted); margin-top: 3px;
+                 writing-mode: vertical-rl; transform: rotate(180deg); }
+    /* breakdown */
+    .bd-row    { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
+    .bd-lbl    { font-size: 0.82rem; width: 110px; flex-shrink: 0; white-space: nowrap;
+                 overflow: hidden; text-overflow: ellipsis; }
+    .bd-track  { flex: 1; background: var(--color-border); border-radius: 4px; height: 12px; }
+    .bd-bar    { background: var(--color-accent2); border-radius: 4px; height: 12px; min-width: 2px; }
+    .bd-meta   { font-size: 0.75rem; color: var(--color-muted); width: 64px; text-align: right; flex-shrink: 0; }
+    /* funnel */
+    .fn-step   { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.45rem 0;
+                 border-bottom: 1px solid var(--color-border); }
+    .fn-event  { font-size: 0.82rem; flex: 1; font-family: monospace; word-break: break-word; min-width: 0; }
+    .fn-count  { font-size: 0.95rem; font-weight: 600; min-width: 56px; text-align: right; }
+    .fn-rate   { font-size: 0.75rem; color: var(--color-muted); min-width: 50px; text-align: right; }
+    /* a/b test */
+    .ab-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .ab-table  { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 360px; }
+    .ab-table th { text-align: left; padding: 0.4rem 0.6rem; font-size: 0.72rem;
+                   text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted);
+                   border-bottom: 1px solid var(--color-border); }
+    .ab-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--color-border); }
+    .ab-table tr:last-child td { border-bottom: none; }
+    .ab-metric  { color: var(--color-muted); }
+    .ab-winner  { font-weight: 700; color: var(--color-accent); }
+    .ab-badge   { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.45rem;
+                  border-radius: 999px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .ab-dark    { background: #1e293b; color: #94a3b8; }
+    .ab-white   { background: #f1f5f9; color: #475569; }
+  </style>
+
+  <h1 style="font-family: var(--font-serif); font-size: 1.75rem; font-weight: 400; margin-bottom: 1.5rem;">
+    Métricas
+    <span style="font-size: 0.9rem; color: var(--color-muted); font-family: var(--font-sans);">— últimos {DAYS} dias</span>
+  </h1>
+
+  <!-- Summary -->
+  <div class="sec">
+    <h2 class="sec-h">Resumo</h2>
+    <div class="chips">
+      <div class="chip"><p class="chip-lbl">Receita 30d</p>    <p class="chip-val">{brl(summary.revenue.d30)}</p></div>
+      <div class="chip"><p class="chip-lbl">Receita total</p>  <p class="chip-val">{brl(summary.revenue.total)}</p></div>
+      <div class="chip"><p class="chip-lbl">Vendas 30d</p>     <p class="chip-val">{summary.sales.d30}</p></div>
+      <div class="chip"><p class="chip-lbl">Ticket médio</p>   <p class="chip-val">{brl(summary.avgTicket.d30)}</p></div>
+      <div class="chip"><p class="chip-lbl">Reembolsos</p>     <p class="chip-val">{summary.refunds.d30}</p></div>
+      <div class="chip"><p class="chip-lbl">Top modelo</p>     <p class="chip-val">{summary.topModel?.name ?? '—'}</p></div>
+      <div class="chip"><p class="chip-lbl">Top tamanho</p>    <p class="chip-val">{summary.topSize?.size ?? '—'}</p></div>
+    </div>
+  </div>
+
+  <!-- Timeseries -->
+  <div class="sec">
+    <h2 class="sec-h">Vendas diárias</h2>
+    <div class="bar-wrap">
+      {timeseries.map(d => (
+        <div class="bar-col" title={`${d.date}: ${d.paid_orders} pedidos · ${brl(d.revenue)}`}>
+          <div
+            class="bar-fill"
+            style={`height: ${Math.max(2, Math.round(d.revenue / maxRevenue * 120))}px;
+                    opacity: ${d.paid_orders > 0 ? '1' : '0.25'};`}
+          ></div>
+          <span class="bar-date">{d.date.slice(5)}</span>
+        </div>
+      ))}
+    </div>
+    <p style="font-size: 0.72rem; color: var(--color-muted); margin-top: 0.3rem;">
+      Altura proporcional à receita diária. Passe o mouse para ver valores.
+    </p>
+  </div>
+
+  <!-- Breakdown: model -->
+  <div class="sec">
+    <h2 class="sec-h">Distribuição por modelo (30d)</h2>
+    {breakdown.byModel.length === 0
+      ? <p style="color: var(--color-muted); font-size: 0.875rem;">Sem dados no período.</p>
+      : breakdown.byModel.map(m => (
+          <div class="bd-row">
+            <span class="bd-lbl">{m.name}</span>
+            <div class="bd-track"><div class="bd-bar" style={`width: ${m.pct}%`}></div></div>
+            <span class="bd-meta">{m.count} · {m.pct}%</span>
+          </div>
+        ))
+    }
+  </div>
+
+  <!-- Breakdown: size -->
+  <div class="sec">
+    <h2 class="sec-h">Distribuição por tamanho (30d)</h2>
+    {breakdown.bySize.length === 0
+      ? <p style="color: var(--color-muted); font-size: 0.875rem;">Sem dados no período.</p>
+      : breakdown.bySize.map(s => (
+          <div class="bd-row">
+            <span class="bd-lbl">{s.size}</span>
+            <div class="bd-track"><div class="bd-bar" style={`width: ${s.pct}%`}></div></div>
+            <span class="bd-meta">{s.count} · {s.pct}%</span>
+          </div>
+        ))
+    }
+  </div>
+
+  <!-- Funnel -->
+  <div class="sec">
+    <h2 class="sec-h">Funil de conversão (30d)</h2>
+    {funnel.steps.map((step, i) => (
+      <div class="fn-step">
+        <span class="fn-event">{step.event}</span>
+        <span class="fn-count">{step.count.toLocaleString('pt-BR')}</span>
+        <span class="fn-rate">{i < funnel.rates.length ? '→ ' + pct(funnel.rates[i].rate) : ''}</span>
+      </div>
+    ))}
+    {!tableExists && (
+      <p style="font-size: 0.78rem; color: var(--color-muted); margin-top: 0.6rem;">
+        Tabela <code>events</code> não encontrada. Registre eventos com campos
+        <code>event</code> (text) e <code>session_id</code> (text, nullable) para ver o funil.
+      </p>
+    )}
+  </div>
+
+  <!-- A/B Test -->
+  <div class="sec">
+    <h2 class="sec-h">
+      Teste A/B — Dark vs. White
+      <span style="font-size: 0.8rem; color: var(--color-muted); font-family: var(--font-sans); font-weight: 400;">— últimos {DAYS} dias</span>
+    </h2>
+
+    {(abEventsRaw ?? []).length === 0 ? (
+      <p style="font-size: 0.875rem; color: var(--color-muted);">
+        Sem dados de variante ainda. Os eventos com <code>variant</code> preenchido aparecerão aqui.
+      </p>
+    ) : (
+      <div class="ab-scroll"><table class="ab-table">
+        <thead>
+          <tr>
+            <th>Métrica</th>
+            {abVariants.map(v => (
+              <th>
+                <span class={`ab-badge ab-${v}`}>{v === 'dark' ? 'A · Dark' : 'B · White'}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ab-metric">Visitas</td>
+            {abVariants.map(v => {
+              const d = abStats.dark.views;
+              const w = abStats.white.views;
+              const cur = abStats[v].views;
+              const isWinner = v === 'dark' ? d >= w : w > d;
+              return <td class={isWinner ? 'ab-winner' : ''}>{cur.toLocaleString('pt-BR')}</td>;
+            })}
+          </tr>
+          <tr>
+            <td class="ab-metric">Cliques CTA</td>
+            {abVariants.map(v => {
+              const cur = abStats[v].clicks;
+              const rate = abRate(cur, abStats[v].views);
+              const d = abStats.dark.clicks / Math.max(abStats.dark.views, 1);
+              const w = abStats.white.clicks / Math.max(abStats.white.views, 1);
+              const isWinner = v === 'dark' ? d >= w : w > d;
+              return <td class={isWinner ? 'ab-winner' : ''}>{cur.toLocaleString('pt-BR')} <span style="color: var(--color-muted); font-size: 0.75rem;">({rate})</span></td>;
+            })}
+          </tr>
+          <tr>
+            <td class="ab-metric">Checkouts</td>
+            {abVariants.map(v => {
+              const cur = abStats[v].checkouts;
+              const rate = abRate(cur, abStats[v].views);
+              const d = abStats.dark.checkouts / Math.max(abStats.dark.views, 1);
+              const w = abStats.white.checkouts / Math.max(abStats.white.views, 1);
+              const isWinner = v === 'dark' ? d >= w : w > d;
+              return <td class={isWinner ? 'ab-winner' : ''}>{cur.toLocaleString('pt-BR')} <span style="color: var(--color-muted); font-size: 0.75rem;">({rate})</span></td>;
+            })}
+          </tr>
+          <tr>
+            <td class="ab-metric">Compras confirmadas</td>
+            {abVariants.map(v => {
+              const cur = abStats[v].purchases;
+              const rate = abRate(cur, abStats[v].views);
+              const d = abStats.dark.purchases / Math.max(abStats.dark.views, 1);
+              const w = abStats.white.purchases / Math.max(abStats.white.views, 1);
+              const isWinner = v === 'dark' ? d >= w : w > d;
+              return <td class={isWinner ? 'ab-winner' : ''}>{cur.toLocaleString('pt-BR')} <span style="color: var(--color-muted); font-size: 0.75rem;">({rate})</span></td>;
+            })}
+          </tr>
+          <tr>
+            <td class="ab-metric" style="font-weight: 600;">Conv. view→compra</td>
+            {abVariants.map(v => {
+              const rate = abRate(abStats[v].purchases, abStats[v].views);
+              const d = abStats.dark.purchases / Math.max(abStats.dark.views, 1);
+              const w = abStats.white.purchases / Math.max(abStats.white.views, 1);
+              const isWinner = v === 'dark' ? d >= w : w > d;
+              return <td class={isWinner ? 'ab-winner' : ''} style="font-size: 1rem;">{rate}</td>;
+            })}
+          </tr>
+        </tbody>
+      </table></div>
+    )}
+    <p style="font-size: 0.7rem; color: var(--color-muted); margin-top: 0.5rem;">
+      Valores em negrito indicam a variante com melhor desempenho em cada métrica.
+      Taxas calculadas em relação ao total de visitas da variante.
+    </p>
+  </div>
+</AdminLayout>

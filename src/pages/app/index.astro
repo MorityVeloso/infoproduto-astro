@@ -1,0 +1,47 @@
+---
+/**
+ * app/index.astro — Área do cliente (dashboard principal).
+ *
+ * TODO: Implemente o dashboard do cliente para o seu produto.
+ *
+ * Padrão do skeleton:
+ *   - O usuário chega aqui via magic link após o pagamento ser confirmado.
+ *   - O middleware garante que só usuários autenticados acessam /app/*.
+ *   - Use Astro.locals.user para obter o usuário autenticado.
+ *
+ * Fluxo de referência (quarto-de-bebe):
+ *   1. Cliente faz login via magic link → cai aqui
+ *   2. Seleciona variante do produto (ex: modelo, tamanho, plano)
+ *   3. Confirmação → redireciona para /app/acesso
+ *
+ * Fluxo alternativo (produto simples, sem seleção):
+ *   1. Cliente faz login via magic link → redireciona direto para /app/acesso
+ *
+ * Exemplo de referência: quarto-de-bebe-astro/src/pages/app/index.astro
+ */
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Área do Cliente</title>
+  </head>
+  <body style="margin:0;min-height:100vh;background:#1c2a3a;color:#f8fafc;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:2rem;">
+    <div style="max-width:480px;text-align:center;">
+      <h1 style="font-size:1.75rem;font-weight:700;margin-bottom:0.5rem;">Olá 👋</h1>
+      <p style="color:#94a3b8;margin-bottom:2rem;">Logado como <strong style="color:#f8fafc;">{user.email}</strong></p>
+      <p style="color:#64748b;font-size:0.875rem;margin-bottom:2rem;">
+        Implemente o dashboard do cliente em <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">src/pages/app/index.astro</code>.
+      </p>
+      <a href="/app/acesso" style="display:inline-block;padding:12px 28px;background:#16a34a;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:0.9rem;">
+        Acessar produto →
+      </a>
+    </div>
+  </body>
+</html>

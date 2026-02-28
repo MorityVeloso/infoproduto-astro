@@ -1,0 +1,93 @@
+---
+export const prerender = false;
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { requireAdmin } from '../../lib/require-admin';
+import { createAdminClient } from '../../lib/supabase/admin';
+import { computeSummary } from '../../lib/metrics';
+
+const result = await requireAdmin(Astro.request);
+if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
+const { profile } = result;
+
+const admin = createAdminClient();
+const { data: orders } = await admin
+  .from('orders')
+  .select('status, paid_at, amount_total, selected_model, selected_size, created_at')
+  .in('status', ['paid', 'refunded']);
+
+const { data: modelsData } = await admin.from('models').select('id, name');
+const modelNames = Object.fromEntries(
+  (modelsData ?? []).map((m: { id: string; name: string }) => [m.id, m.name]),
+);
+
+const s = computeSummary(orders ?? [], modelNames, new Date());
+
+const brl = (n: number) =>
+  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+---
+
+<AdminLayout title="Dashboard — Admin" email={profile.email}>
+  <style>
+    .section-title { font-size: 0.75rem; color: var(--color-muted); text-transform: uppercase;
+                     letter-spacing: 0.06em; margin: 1.5rem 0 0.6rem; font-weight: 600; }
+    .kpi-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.85rem; }
+    .kpi-card  { background: var(--color-surface); border: 1px solid var(--color-border);
+                 border-radius: var(--radius-md); padding: 1rem 1.25rem; }
+    .kpi-label { font-size: 0.72rem; color: var(--color-muted); text-transform: uppercase;
+                 letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+    .kpi-value { font-size: 1.85rem; font-family: var(--font-serif); font-weight: 400; line-height: 1.1; }
+    .kpi-sub   { font-size: 0.78rem; color: var(--color-muted); margin-top: 0.3rem; }
+  </style>
+
+  <h1 style="font-family: var(--font-serif); font-size: 1.75rem; font-weight: 400; margin-bottom: 0.25rem;">
+    Dashboard
+  </h1>
+  <p style="color: var(--color-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">
+    Dados em tempo real
+  </p>
+
+  <p class="section-title">Receita</p>
+  <div class="kpi-grid">
+    <div class="kpi-card"><p class="kpi-label">Hoje</p>         <p class="kpi-value">{brl(s.revenue.today)}</p></div>
+    <div class="kpi-card"><p class="kpi-label">Últimos 7d</p>   <p class="kpi-value">{brl(s.revenue.d7)}</p></div>
+    <div class="kpi-card"><p class="kpi-label">Últimos 30d</p>  <p class="kpi-value">{brl(s.revenue.d30)}</p></div>
+    <div class="kpi-card"><p class="kpi-label">Total</p>        <p class="kpi-value">{brl(s.revenue.total)}</p></div>
+  </div>
+
+  <p class="section-title">Vendas (pedidos pagos)</p>
+  <div class="kpi-grid">
+    <div class="kpi-card"><p class="kpi-label">Hoje</p>         <p class="kpi-value">{s.sales.today}</p></div>
+    <div class="kpi-card"><p class="kpi-label">Últimos 7d</p>   <p class="kpi-value">{s.sales.d7}</p></div>
+    <div class="kpi-card"><p class="kpi-label">Últimos 30d</p>  <p class="kpi-value">{s.sales.d30}</p></div>
+    <div class="kpi-card"><p class="kpi-label">Total</p>        <p class="kpi-value">{s.sales.total}</p></div>
+  </div>
+
+  <p class="section-title">Outros indicadores (30d)</p>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <p class="kpi-label">Ticket médio</p>
+      <p class="kpi-value">{brl(s.avgTicket.d30)}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-label">Reembolsos</p>
+      <p class="kpi-value">{s.refunds.d30}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-label">Modelo mais escolhido</p>
+      <p class="kpi-value" style="font-size: 1.35rem;">{s.topModel?.name ?? '—'}</p>
+      {s.topModel && <p class="kpi-sub">{s.topModel.count} pedidos</p>}
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-label">Tamanho mais escolhido</p>
+      <p class="kpi-value" style="font-size: 1.35rem;">{s.topSize?.size ?? '—'}</p>
+      {s.topSize && <p class="kpi-sub">{s.topSize.count} pedidos</p>}
+    </div>
+  </div>
+
+  <p style="margin-top: 2rem;">
+    <a href="/admin/metrics" style="color: var(--color-accent2); font-size: 0.875rem; text-decoration: underline;">
+      Ver métricas detalhadas →
+    </a>
+  </p>
+</AdminLayout>

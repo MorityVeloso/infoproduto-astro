@@ -1,0 +1,30 @@
+---
+interface Props {
+  surface?: boolean;
+  class?: string;
+  id?: string;
+  py?: 'sm' | 'md' | 'lg' | 'xl';
+}
+
+const { surface = false, class: className = '', id, py = 'xl' } = Astro.props;
+
+const paddingMap = {
+  sm: '2rem',
+  md: '3rem',
+  lg: '5rem',
+  xl: '7rem',
+};
+
+const padding = paddingMap[py];
+---
+
+<section
+  id={id}
+  style={`
+    background: var(${surface ? '--color-surface' : '--color-bg'});
+    padding: ${padding} 0;
+  `}
+  class={className}
+>
+  <slot />
+</section>

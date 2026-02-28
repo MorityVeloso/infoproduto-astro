@@ -1,0 +1,24 @@
+---
+interface Props {
+  class?: string;
+  hover?: boolean;
+}
+
+const { class: className = '', hover = false } = Astro.props;
+---
+
+<div
+  style={`
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: 2rem;
+    ${hover ? 'transition: box-shadow 0.2s, transform 0.2s; cursor: pointer;' : ''}
+  `}
+  class={className}
+  onmouseover={hover ? "this.style.boxShadow='0 4px 16px 0 rgb(58 54 50 / 0.12), 0 0 0 1px var(--color-border)'; this.style.transform='translateY(-2px)'" : undefined}
+  onmouseout={hover ? "this.style.boxShadow='var(--shadow-card)'; this.style.transform='translateY(0)'" : undefined}
+>
+  <slot />
+</div>
