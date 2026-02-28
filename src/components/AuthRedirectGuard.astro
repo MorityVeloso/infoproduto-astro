@@ -1,0 +1,23 @@
+<!--
+  AuthRedirectGuard.astro
+  Intercepta tokens de auth do Supabase que caem em páginas erradas
+  (quando o Supabase ignora emailRedirectTo e usa o Site URL como fallback).
+  Deve ser incluído no <head> de todos os layouts.
+-->
+<script is:inline>
+(function() {
+  // Só redireciona se NÃO estamos já no callback
+  if (window.location.pathname === '/auth/callback') return;
+
+  var hash = window.location.hash;
+  var search = window.location.search;
+
+  // Detecta tokens de auth (implicit: #access_token= | PKCE: ?code=)
+  var hasImplicitToken = hash && hash.indexOf('access_token=') !== -1;
+  var hasPKCECode = search && search.indexOf('code=') !== -1;
+
+  if (hasImplicitToken || hasPKCECode) {
+    window.location.replace('/auth/callback' + search + hash);
+  }
+})();
+</script>

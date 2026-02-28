@@ -1,8 +1,7 @@
 ---
 export const prerender = false;
 
-const redirect    = Astro.url.searchParams.get('redirect') ?? '/app';
-const callbackUrl = `${Astro.url.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`;
+const callbackUrl = `${Astro.url.origin}/auth/callback`;
 ---
 
 <!doctype html>
@@ -230,6 +229,10 @@ const callbackUrl = `${Astro.url.origin}/auth/callback?redirect=${encodeURICompo
       async function sendMagicLink(email: string) {
         showState('loading');
         errorMsg.style.display = 'none';
+
+        // Salva destino no localStorage — lido pelo callback após autenticação
+        const redirect = new URLSearchParams(window.location.search).get('redirect') ?? '/app';
+        localStorage.setItem('post_login_redirect', redirect);
 
         const supabase = createBrowserClient();
         const { error } = await supabase.auth.signInWithOtp({

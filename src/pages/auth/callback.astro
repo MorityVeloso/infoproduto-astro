@@ -49,7 +49,11 @@ const redirectTo = Astro.url.searchParams.get('redirect') ?? '/app';
       import { createBrowserClient } from '../../lib/supabase/browser';
       import { syncSessionToCookies } from '../../lib/session';
 
-      const redirectTo = (document.getElementById('callback-root') as HTMLElement).dataset.redirect ?? '/app';
+      // Lê destino do localStorage (salvo pelo login.astro) com fallback para data-redirect ou /app
+      const redirectTo = localStorage.getItem('post_login_redirect')
+        || (document.getElementById('callback-root') as HTMLElement).dataset.redirect
+        || '/app';
+      localStorage.removeItem('post_login_redirect');
 
       const statusMsg = document.getElementById('status-msg');
 

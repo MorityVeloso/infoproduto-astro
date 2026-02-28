@@ -1,6 +1,7 @@
 ---
 import '../styles/globals.css';
 import FloatingWhatsApp from '../components/FloatingWhatsApp.astro';
+import AuthRedirectGuard from '../components/AuthRedirectGuard.astro';
 import { PRODUCT } from '../config/product';
 
 interface Props {
@@ -22,6 +23,7 @@ const {
     <meta name="description" content={description} />
     <title>{title}</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <AuthRedirectGuard />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" />
