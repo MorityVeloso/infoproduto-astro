@@ -49,6 +49,9 @@ function coverUrl(path: string | null, id: string) {
     .btn-primary:disabled, .btn-sm:disabled { opacity: 0.5; cursor: default; }
     .btn-upload         { padding: 0.3rem 0.75rem; border-radius: 6px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text); cursor: pointer; font-size: 0.82rem; white-space: nowrap; }
     .btn-upload:hover   { background: var(--color-surface-hover); }
+    .btn-danger         { padding: 0.28rem 0.65rem; border-radius: 6px; border: 1px solid rgba(239,68,68,0.4); background: rgba(239,68,68,0.1); color: #f87171; cursor: pointer; font-size: 0.8rem; transition: background 0.15s, border-color 0.15s; font-family: inherit; }
+    .btn-danger:hover   { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.7); }
+    .btn-danger:disabled { opacity: 0.5; cursor: default; }
 
     /* ── Messages ──────────────────────────────────────────────────────── */
     .msg                { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; display: none; margin-bottom: 0.75rem; }
@@ -133,13 +136,15 @@ function coverUrl(path: string | null, id: string) {
       {(models ?? []).map((m) => (
         <tr data-model-id={m.id}>
           <td>
-            <img
-              class="cover-thumb"
-              src={coverUrl(m.cover_path as string | null, m.id)}
-              alt=""
-              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-            />
-            <div class="cover-placeholder" style="display:none">sem foto</div>
+            {m.cover_path ? (
+              <img
+                class="cover-thumb"
+                src={coverUrl(m.cover_path as string | null, m.id)}
+                alt=""
+              />
+            ) : (
+              <div class="cover-placeholder">sem foto</div>
+            )}
           </td>
           <td style="font-size:0.78rem; color: var(--color-muted); font-family: monospace;">{m.id}</td>
           <td>
@@ -179,6 +184,7 @@ function coverUrl(path: string | null, id: string) {
                 data-id={m.id}
                 data-is-active={String(m.is_active)}
               >{m.is_active ? 'Desativar' : 'Ativar'}</button>
+              <button class="btn-danger delete-btn" data-id={m.id} data-name={m.name}>Excluir</button>
             </div>
           </td>
         </tr>
@@ -394,6 +400,8 @@ function coverUrl(path: string | null, id: string) {
 
   <script>
     (() => {
+      const SUPABASE_URL = import.meta.env.PUBLIC_SUPABASE_URL as string;
+
       // ── Helpers ────────────────────────────────────────────────────────
       function showMsg(el: HTMLElement, text: string, kind: 'ok' | 'err') {
         el.textContent = text;
@@ -513,81 +521,118 @@ function coverUrl(path: string | null, id: string) {
         coverPlaceholder.style.display = 'none';
       });
 
-      coverUploadBtn.addEventListener('click', async () => {
-        const file = coverFileInput.files?.[0];
+      // ── Upload helper (signed URL — bypassa Cloudflare WAF) ────────────
+      async function uploadFile(opts: {
+        file: File;
+        assetType: string;
+        statusEl: HTMLElement | null;
+        btn: HTMLButtonElement;
+        size?: string;
+        onSuccess?: (path: string) => void;
+      }) {
+        const { file, assetType, statusEl, btn, size, onSuccess } = opts;
         const modelId = editId.value;
-        if (!file) { setStatus(coverStatus, 'Selecione um arquivo', 'err'); return; }
         if (!modelId) return;
 
-        const origLabel = coverUploadBtn.textContent ?? 'Enviar imagem';
-        setLoading(coverUploadBtn, true, origLabel);
-        setStatus(coverStatus, '', '');
-
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('model_id', modelId);
-        fd.append('asset_type', 'cover_image');
+        const origLabel = btn.textContent ?? 'Enviar';
+        setLoading(btn, true, origLabel);
+        setStatus(statusEl, '', '');
 
         try {
-          const res = await fetch('/api/admin/models/upload', { method: 'POST', body: fd });
-          setLoading(coverUploadBtn, false, origLabel);
-          if (res.ok) {
-            const { url } = await res.json() as { path: string; url?: string };
-            setStatus(coverStatus, '\u2713 Enviado', 'ok');
-            if (url) {
-              coverPreview.src = url + '?t=' + Date.now();
-              coverPreview.style.display = 'block';
-              coverPlaceholder.style.display = 'none';
-              const row = modelsTbody.querySelector(`tr[data-model-id="${modelId}"]`);
-              const thumb = row?.querySelector<HTMLImageElement>('.cover-thumb');
-              if (thumb) { thumb.src = url + '?t=' + Date.now(); thumb.style.display = 'block'; }
-            }
-          } else {
-            const err = await res.json().catch(() => ({})) as { error?: string };
-            setStatus(coverStatus, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+          // 1. Obter URL assinada (JSON, não bloqueado pelo WAF)
+          const urlRes = await fetch('/api/admin/models/upload-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_id: modelId, asset_type: assetType, size }),
+          });
+          const urlJson = await urlRes.json() as { ok?: boolean; signedUrl?: string; path?: string; error?: string };
+          if (!urlRes.ok || !urlJson.ok) {
+            setStatus(statusEl, 'Erro: ' + (urlJson.error ?? String(urlRes.status)), 'err');
+            setLoading(btn, false, origLabel);
+            return;
           }
+
+          // 2. Upload direto ao Supabase Storage (sem passar pelo Cloudflare)
+          const putRes = await fetch(urlJson.signedUrl!, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file,
+          });
+          if (!putRes.ok) {
+            setStatus(statusEl, `Erro no upload (${putRes.status})`, 'err');
+            setLoading(btn, false, origLabel);
+            return;
+          }
+
+          setStatus(statusEl, '\u2713 Enviado', 'ok');
+          setLoading(btn, false, origLabel);
+          onSuccess?.(urlJson.path!);
         } catch {
-          setLoading(coverUploadBtn, false, origLabel);
-          setStatus(coverStatus, 'Erro de rede', 'err');
+          setStatus(statusEl, 'Erro de rede', 'err');
+          setLoading(btn, false, origLabel);
         }
+      }
+
+      coverUploadBtn.addEventListener('click', async () => {
+        const file = coverFileInput.files?.[0];
+        if (!file) { setStatus(coverStatus, 'Selecione um arquivo', 'err'); return; }
+        const modelId = editId.value;
+        if (!modelId) return;
+
+        await uploadFile({
+          file,
+          assetType: 'cover_image',
+          statusEl: coverStatus,
+          btn: coverUploadBtn,
+          onSuccess: async (path) => {
+            // 3. Atualizar cover_path no banco
+            await fetch('/api/admin/models/update-cover', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: modelId, cover_path: path }),
+            });
+            // Atualizar preview e thumbnail na tabela
+            const url = `${SUPABASE_URL}/storage/v1/object/public/model-images/${path}?t=${Date.now()}`;
+            coverPreview.src = url;
+            coverPreview.style.display = 'block';
+            coverPlaceholder.style.display = 'none';
+            const row = modelsTbody.querySelector(`tr[data-model-id="${modelId}"]`);
+            const thumb = row?.querySelector<HTMLImageElement>('.cover-thumb');
+            if (thumb) {
+              thumb.src = url;
+              thumb.style.display = 'block';
+            } else {
+              // Substituir placeholder por img
+              const ph = row?.querySelector('.cover-placeholder') as HTMLElement | null;
+              if (ph) {
+                const img = document.createElement('img');
+                img.className = 'cover-thumb';
+                img.src = url;
+                img.alt = '';
+                ph.replaceWith(img);
+              }
+            }
+            // Atualizar data-cover-path no botão de editar
+            const eb = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) eb.dataset.coverPath = path;
+          },
+        });
       });
 
       // ── Kit file uploads ───────────────────────────────────────────────
       editPanel.querySelectorAll<HTMLButtonElement>('.kit-upload-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
           const asset = btn.dataset.asset!;
-          const modelId = editId.value;
           const fileInput = editPanel.querySelector<HTMLInputElement>(`.kit-file[data-asset="${asset}"]`);
           const statusEl = editPanel.querySelector<HTMLElement>(`[data-status="${asset}"]`);
           const file = fileInput?.files?.[0];
-
           if (!file) { setStatus(statusEl, 'Selecione um arquivo', 'err'); return; }
-          if (!modelId) return;
-
-          const origLabel = btn.textContent ?? 'Enviar';
-          setLoading(btn, true, origLabel);
-          setStatus(statusEl, '', '');
           hideMsg(kitMsg);
 
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('model_id', modelId);
-          fd.append('asset_type', asset);
-
-          try {
-            const res = await fetch('/api/admin/models/upload', { method: 'POST', body: fd });
-            setLoading(btn, false, origLabel);
-            if (res.ok) {
-              setStatus(statusEl, '\u2713 Enviado', 'ok');
-              if (fileInput) fileInput.value = '';
-            } else {
-              const err = await res.json().catch(() => ({})) as { error?: string };
-              setStatus(statusEl, 'Erro: ' + (err.error ?? String(res.status)), 'err');
-            }
-          } catch {
-            setLoading(btn, false, origLabel);
-            setStatus(statusEl, 'Erro de rede', 'err');
-          }
+          await uploadFile({
+            file, assetType: asset, statusEl, btn,
+            onSuccess: () => { if (fileInput) fileInput.value = ''; },
+          });
         });
       });
 
@@ -596,39 +641,16 @@ function coverUrl(path: string | null, id: string) {
         btn.addEventListener('click', async () => {
           const asset = btn.dataset.asset!;
           const size  = btn.dataset.size!;
-          const modelId = editId.value;
           const fileInput = editPanel.querySelector<HTMLInputElement>(`.size-file[data-asset="${asset}"][data-size="${size}"]`);
           const statusEl = editPanel.querySelector<HTMLElement>(`[data-status="${asset}_${size}"]`);
           const file = fileInput?.files?.[0];
-
           if (!file) { setStatus(statusEl, 'Selecione um arquivo', 'err'); return; }
-          if (!modelId) return;
-
-          const origLabel = btn.textContent ?? 'Enviar';
-          setLoading(btn, true, origLabel);
-          setStatus(statusEl, '', '');
           hideMsg(sizeMsg);
 
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('model_id', modelId);
-          fd.append('asset_type', asset);
-          fd.append('size', size);
-
-          try {
-            const res = await fetch('/api/admin/models/upload', { method: 'POST', body: fd });
-            setLoading(btn, false, origLabel);
-            if (res.ok) {
-              setStatus(statusEl, '\u2713 Enviado', 'ok');
-              if (fileInput) fileInput.value = '';
-            } else {
-              const err = await res.json().catch(() => ({})) as { error?: string };
-              setStatus(statusEl, 'Erro: ' + (err.error ?? String(res.status)), 'err');
-            }
-          } catch {
-            setLoading(btn, false, origLabel);
-            setStatus(statusEl, 'Erro de rede', 'err');
-          }
+          await uploadFile({
+            file, assetType: asset, statusEl, btn, size,
+            onSuccess: () => { if (fileInput) fileInput.value = ''; },
+          });
         });
       });
 
@@ -651,7 +673,7 @@ function coverUrl(path: string | null, id: string) {
 
         const coverPath = btn.dataset.coverPath ?? '';
         if (coverPath) {
-          coverPreview.src = `/images/${btn.dataset.id}/card.jpg`;
+          coverPreview.src = `${SUPABASE_URL}/storage/v1/object/public/model-images/${coverPath}`;
           coverPreview.style.display = 'block';
           coverPlaceholder.style.display = 'none';
         } else {
@@ -931,7 +953,13 @@ function coverUrl(path: string | null, id: string) {
           toggleBtn.dataset.id = model.id;
           toggleBtn.dataset.isActive = String(model.is_active);
 
-          ac.appendChild(editBtn); ac.appendChild(toggleBtn);
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn-danger delete-btn';
+          deleteBtn.textContent = 'Excluir';
+          deleteBtn.dataset.id = model.id;
+          deleteBtn.dataset.name = model.name;
+
+          ac.appendChild(editBtn); ac.appendChild(toggleBtn); ac.appendChild(deleteBtn);
           tdActions.appendChild(ac);
 
           tr.appendChild(tdCover); tr.appendChild(tdId); tr.appendChild(tdName);
@@ -946,6 +974,40 @@ function coverUrl(path: string | null, id: string) {
         }
       });
 
+      // ── Delete ─────────────────────────────────────────────────────────
+      async function handleDelete(btn: HTMLButtonElement) {
+        const id   = btn.dataset.id ?? '';
+        const name = btn.dataset.name ?? 'este modelo';
+        if (!id) return;
+
+        if (!window.confirm(`Excluir "${name}" permanentemente? Esta ação não pode ser desfeita.`)) return;
+
+        btn.disabled = true;
+        hideMsg(globalMsg);
+
+        try {
+          const res = await fetch('/api/admin/models/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+
+          if (res.ok) {
+            const row = modelsTbody.querySelector(`tr[data-model-id="${id}"]`);
+            row?.remove();
+            showMsg(globalMsg, `Modelo "${name}" excluído com sucesso.`, 'ok');
+            if (editId.value === id) editPanel.classList.remove('open');
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            btn.disabled = false;
+            showMsg(globalMsg, 'Erro ao excluir: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          btn.disabled = false;
+          showMsg(globalMsg, 'Erro de rede. Verifique a conexão.', 'err');
+        }
+      }
+
       // ── Row listeners ──────────────────────────────────────────────────
       function attachRowListeners(row: HTMLTableRowElement) {
         row.querySelector<HTMLButtonElement>('.edit-btn')?.addEventListener('click', e => {
@@ -953,6 +1015,9 @@ function coverUrl(path: string | null, id: string) {
         });
         row.querySelector<HTMLButtonElement>('.toggle-btn')?.addEventListener('click', e => {
           void handleToggle(e.currentTarget as HTMLButtonElement);
+        });
+        row.querySelector<HTMLButtonElement>('.delete-btn')?.addEventListener('click', e => {
+          void handleDelete(e.currentTarget as HTMLButtonElement);
         });
       }
 

@@ -132,3 +132,64 @@ create trigger trg_profiles_updated_at
 create trigger trg_orders_updated_at
   before update on orders
   for each row execute function update_updated_at();
+
+-- ── Admin helper function ───────────────────────────────────────────────────
+create or replace function is_admin()
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+-- ── Products ────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS products (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text NOT NULL,
+  description text NULL,
+  price       numeric(10,2) NOT NULL DEFAULT 0.00,
+  type        text NOT NULL DEFAULT 'main' CHECK (type IN ('main', 'order_bump', 'brinde')),
+  is_active   boolean NOT NULL DEFAULT true,
+  sort_order  int NOT NULL DEFAULT 0,
+  cover_path  text NULL,
+  asset_path  text NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_products_type ON products(type);
+CREATE INDEX idx_products_active ON products(is_active);
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "products: anon select active" ON products FOR SELECT USING (is_active = true);
+CREATE POLICY "products: admin all" ON products FOR ALL USING (is_admin());
+
+CREATE TRIGGER trg_products_updated_at
+  BEFORE UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ── Order Items ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS order_items (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id          uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id        uuid NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+  price_at_purchase numeric(10,2) NOT NULL,
+  quantity          int NOT NULL DEFAULT 1,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_order_items_order ON order_items(order_id);
+CREATE INDEX idx_order_items_product ON order_items(product_id);
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "order_items: customer select own" ON order_items FOR SELECT
+  USING (EXISTS (SELECT 1 FROM orders WHERE orders.id = order_items.order_id AND orders.customer_id = auth.uid()));
+CREATE POLICY "order_items: admin all" ON order_items FOR ALL USING (is_admin());
+
+-- ── Downloads ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS downloads (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid NOT NULL REFERENCES auth.users(id),
+  order_id    uuid REFERENCES orders(id),
+  asset_key   text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_downloads_customer ON downloads(customer_id);
+ALTER TABLE downloads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "downloads: customer select own" ON downloads FOR SELECT USING (customer_id = auth.uid());
+CREATE POLICY "downloads: admin all" ON downloads FOR ALL USING (is_admin());

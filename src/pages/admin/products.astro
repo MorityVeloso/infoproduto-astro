@@ -1,0 +1,818 @@
+---
+// src/pages/admin/products.astro
+export const prerender = false;
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { requireAdmin } from '../../lib/require-admin';
+import { createAdminClient } from '../../lib/supabase/admin';
+
+const result = await requireAdmin(Astro.request);
+if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
+const profile = result.profile!;
+
+const admin = createAdminClient();
+const { data: products = [] } = await admin
+  .from('products')
+  .select('*')
+  .order('type')
+  .order('sort_order', { ascending: true });
+
+function typeBadge(type: string): { label: string; bg: string; color: string } {
+  switch (type) {
+    case 'main':       return { label: 'Principal',  bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' };
+    case 'order_bump': return { label: 'Order Bump', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' };
+    case 'brinde':     return { label: 'Brinde',     bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' };
+    default:           return { label: type,          bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' };
+  }
+}
+---
+
+<AdminLayout title="Produtos — Admin" email={profile.email}>
+  <style is:global>
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* -- Page Header --------------------------------------------------- */
+    .page-header   { margin-bottom: 2rem; animation: fadeInUp 0.4s ease both; }
+    .page-title    { display: flex; align-items: center; gap: 0.55rem; font-size: 1.6rem; font-weight: 700; color: var(--text); margin: 0 0 0.3rem; }
+    .page-title svg { flex-shrink: 0; color: var(--green); }
+    .page-subtitle { color: var(--muted); font-size: 0.9rem; margin: 0; }
+
+    /* -- Messages ------------------------------------------------------ */
+    .msg           { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; display: none; margin-bottom: 0.75rem; }
+    .msg.ok        { background: rgba(34,197,94,0.12); color: #4ade80; display: block; }
+    .msg.err       { background: rgba(239,68,68,0.12); color: #f87171; display: block; }
+    .upload-status     { font-size: 0.78rem; }
+    .upload-status.ok  { color: #4ade80; }
+    .upload-status.err { color: #f87171; }
+
+    /* -- Table wrapper ------------------------------------------------- */
+    .table-wrap    {
+      background: rgba(37,52,71,0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+      animation: fadeInUp 0.4s ease 0.08s both;
+    }
+    .table-scroll  { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* -- Table --------------------------------------------------------- */
+    table          { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td         { padding: 0.65rem 0.85rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.07); vertical-align: middle; }
+    th             { font-weight: 600; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255,255,255,0.04); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td      { background: rgba(255,255,255,0.03); }
+    .badge         { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.73rem; font-weight: 600; }
+    .badge.active  { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge.inactive{ background: rgba(239,68,68,0.15); color: #f87171; }
+    .action-cell   { display: flex; gap: 0.4rem; align-items: center; white-space: nowrap; }
+    .empty         { text-align: center; padding: 3rem; color: var(--muted); }
+
+    /* -- Buttons ------------------------------------------------------- */
+    .btn-sm        { padding: 0.28rem 0.65rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.13); background: rgba(37,52,71,0.9); color: var(--text); cursor: pointer; font-size: 0.8rem; transition: background 0.15s; font-family: inherit; }
+    .btn-sm:hover  { background: rgba(255,255,255,0.08); }
+    .btn-primary   { padding: 0.45rem 1rem; border-radius: 7px; border: none; background: var(--green); color: #fff; cursor: pointer; font-size: 0.875rem; font-weight: 600; font-family: inherit; transition: background 0.15s; }
+    .btn-primary:hover    { background: #16a34a; }
+    .btn-primary:disabled,
+    .btn-sm:disabled      { opacity: 0.5; cursor: default; }
+    .btn-upload    { padding: 0.3rem 0.75rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.13); background: transparent; color: var(--text); cursor: pointer; font-size: 0.82rem; white-space: nowrap; font-family: inherit; transition: background 0.15s; }
+    .btn-upload:hover { background: rgba(255,255,255,0.07); }
+    .btn-danger    { padding: 0.28rem 0.65rem; border-radius: 6px; border: 1px solid rgba(239,68,68,0.4); background: rgba(239,68,68,0.1); color: #f87171; cursor: pointer; font-size: 0.8rem; transition: background 0.15s, border-color 0.15s; font-family: inherit; }
+    .btn-danger:hover { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.7); }
+    .btn-danger:disabled { opacity: 0.5; cursor: default; }
+
+    /* -- Edit panel ---------------------------------------------------- */
+    .edit-panel    {
+      display: none;
+      background: rgba(37,52,71,0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .edit-panel.open { display: block; animation: fadeInUp 0.3s ease both; }
+    .panel-header  { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .panel-title   { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+    .panel-id      { font-size: 0.82rem; color: var(--muted); font-family: monospace; font-weight: 400; margin-left: 0.35rem; }
+    .close-btn     { background: none; border: none; cursor: pointer; font-size: 1.1rem; color: var(--muted); line-height: 1; padding: 0.25rem; border-radius: 4px; transition: color 0.15s; }
+    .close-btn:hover { color: var(--text); }
+
+    /* -- Form fields --------------------------------------------------- */
+    .field         { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.85rem; }
+    .field label   { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field textarea,
+    .field select  {
+      padding: 0.45rem 0.7rem;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: rgba(28,42,58,0.8);
+      color: var(--text);
+      transition: border-color 0.15s;
+    }
+    .field input[type="text"]:focus,
+    .field input[type="number"]:focus,
+    .field textarea:focus,
+    .field select:focus { outline: none; border-color: var(--green); }
+    .field textarea { resize: vertical; min-height: 70px; }
+    .form-row      { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .form-row .field { flex: 1; min-width: 140px; }
+    .form-actions  { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    .req           { color: #f87171; }
+    @media (max-width: 600px) {
+      .form-row    { flex-direction: column; }
+      .form-row .field { min-width: 0; }
+    }
+
+    /* -- Upload rows --------------------------------------------------- */
+    .upload-row    { display: flex; align-items: center; gap: 0.65rem; padding: 0.75rem 0; border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; }
+    .upload-row:last-child { border-bottom: none; }
+    .upload-label  { font-size: 0.85rem; min-width: 155px; flex-shrink: 0; color: var(--text); }
+    .upload-label small { color: var(--muted); }
+    .upload-row input[type="file"] { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--muted); cursor: pointer; }
+
+    /* -- Asset section ------------------------------------------------- */
+    .asset-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); }
+    .asset-section.hidden { display: none; }
+    .asset-current { font-size: 0.78rem; color: var(--muted); margin-top: 0.35rem; word-break: break-all; }
+
+    /* -- Create section ------------------------------------------------ */
+    .create-section {
+      margin-top: 2rem;
+      background: rgba(37,52,71,0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-top: 2px solid rgba(34,197,94,0.4);
+      border-radius: 12px;
+      padding: 1.5rem;
+      animation: fadeInUp 0.4s ease 0.16s both;
+    }
+    .create-title  { font-size: 1rem; font-weight: 700; color: var(--text); margin: 0 0 0.4rem; display: flex; align-items: center; gap: 0.5rem; }
+    .create-title svg { color: var(--green); }
+    .create-desc   { font-size: 0.82rem; color: var(--muted); margin: 0 0 1.25rem; }
+  </style>
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      Produtos
+    </h1>
+    <p class="page-subtitle">Gerencie os produtos, order bumps e brindes.</p>
+  </div>
+
+  <div id="global-msg" class="msg" role="status"></div>
+
+  <div class="table-wrap">
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Nome</th>
+          <th>Pre&ccedil;o</th>
+          <th>Status</th>
+          <th>A&ccedil;&otilde;es</th>
+        </tr>
+      </thead>
+      <tbody id="products-body">
+        {(products ?? []).map((p) => {
+          const tb = typeBadge(p.type as string);
+          return (
+            <tr data-id={p.id}>
+              <td>
+                <span class="badge" style={`background: ${tb.bg}; color: ${tb.color};`}>{tb.label}</span>
+              </td>
+              <td>
+                <strong>{p.name}</strong>
+                {p.description && <span style="display:block;font-size:0.78rem;color:var(--muted);margin-top:2px;">{(p.description as string).slice(0, 80)}</span>}
+              </td>
+              <td>R$&nbsp;{Number(p.price ?? 0).toFixed(2).replace('.', ',')}</td>
+              <td>
+                <span class={`badge ${p.is_active ? 'active' : 'inactive'}`}>
+                  {p.is_active ? 'Ativo' : 'Inativo'}
+                </span>
+              </td>
+              <td>
+                <div class="action-cell">
+                  <button
+                    class="btn-sm edit-btn"
+                    data-id={p.id}
+                    data-name={p.name}
+                    data-description={p.description ?? ''}
+                    data-price={String(p.price ?? 0)}
+                    data-type={p.type}
+                    data-is-active={String(p.is_active)}
+                    data-sort-order={String(p.sort_order ?? 0)}
+                    data-cover-path={p.cover_path ?? ''}
+                    data-asset-path={p.asset_path ?? ''}
+                  >Editar</button>
+                  <button
+                    class="btn-sm toggle-btn"
+                    data-id={p.id}
+                    data-is-active={String(p.is_active)}
+                  >{p.is_active ? 'Desativar' : 'Ativar'}</button>
+                  <button
+                    class="btn-danger delete-btn"
+                    data-id={p.id}
+                    data-name={p.name}
+                  >Excluir</button>
+                </div>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+    </div>
+    {(products ?? []).length === 0 && (
+      <div class="empty">Nenhum produto cadastrado.</div>
+    )}
+  </div>
+
+  <!-- -- Edit panel ---------------------------------------------------- -->
+  <div class="edit-panel" id="edit-panel">
+    <div class="panel-header">
+      <span class="panel-title">Editar produto <span class="panel-id" id="edit-panel-id"></span></span>
+      <button id="close-edit-btn" class="close-btn">&#x2715;</button>
+    </div>
+
+    <div id="edit-msg" class="msg" aria-live="polite"></div>
+    <input type="hidden" id="edit-id" />
+
+    <div class="field">
+      <label for="edit-name">Nome</label>
+      <input type="text" id="edit-name" placeholder="Nome do produto" />
+    </div>
+
+    <div class="field">
+      <label for="edit-description">Descri&ccedil;&atilde;o</label>
+      <textarea id="edit-description" placeholder="Descri&ccedil;&atilde;o do produto"></textarea>
+    </div>
+
+    <div class="form-row">
+      <div class="field" style="max-width:140px">
+        <label for="edit-price">Pre&ccedil;o (R$)</label>
+        <input type="number" id="edit-price" min="0" step="0.01" />
+      </div>
+      <div class="field" style="max-width:180px">
+        <label for="edit-type">Tipo</label>
+        <select id="edit-type">
+          <option value="main">Principal</option>
+          <option value="order_bump">Order Bump</option>
+          <option value="brinde">Brinde</option>
+        </select>
+      </div>
+      <div class="field" style="max-width:100px">
+        <label for="edit-sort-order">Ordem</label>
+        <input type="number" id="edit-sort-order" placeholder="0" min="0" />
+      </div>
+      <div class="field" style="max-width:140px">
+        <label for="edit-is-active">Status</label>
+        <select id="edit-is-active">
+          <option value="true">Ativo</option>
+          <option value="false">Inativo</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Asset upload (visible only for order_bump) -->
+    <div class="asset-section hidden" id="asset-section">
+      <div class="field">
+        <label>Arquivo Entreg&aacute;vel (PDF)</label>
+        <div class="upload-row">
+          <input type="file" id="asset-file-input" accept=".pdf" />
+          <button class="btn-upload" id="asset-upload-btn">Enviar arquivo</button>
+          <span id="asset-upload-status" class="upload-status"></span>
+        </div>
+        <div class="asset-current" id="asset-current-path"></div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-primary" id="save-edit-btn">Salvar produto</button>
+      <button class="btn-sm" id="cancel-edit-btn">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- -- Create section ------------------------------------------------ -->
+  <div class="create-section">
+    <h2 class="create-title">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+      Adicionar novo produto
+    </h2>
+    <p class="create-desc">Preencha os campos abaixo para criar um novo produto.</p>
+    <div id="create-msg" class="msg" aria-live="polite"></div>
+
+    <div class="field">
+      <label for="create-name">Nome <span class="req">*</span></label>
+      <input type="text" id="create-name" placeholder="Nome do produto" />
+    </div>
+
+    <div class="field">
+      <label for="create-description">Descri&ccedil;&atilde;o</label>
+      <textarea id="create-description" placeholder="Descri&ccedil;&atilde;o do produto"></textarea>
+    </div>
+
+    <div class="form-row">
+      <div class="field" style="max-width:140px">
+        <label for="create-price">Pre&ccedil;o (R$) <span class="req">*</span></label>
+        <input type="number" id="create-price" min="0" step="0.01" value="0.00" />
+      </div>
+      <div class="field" style="max-width:180px">
+        <label for="create-type">Tipo <span class="req">*</span></label>
+        <select id="create-type">
+          <option value="main">Principal</option>
+          <option value="order_bump">Order Bump</option>
+          <option value="brinde">Brinde</option>
+        </select>
+      </div>
+      <div class="field" style="max-width:100px">
+        <label for="create-sort-order">Ordem</label>
+        <input type="number" id="create-sort-order" placeholder="0" min="0" value="0" />
+      </div>
+    </div>
+
+    <button class="btn-primary" id="create-btn">Criar produto</button>
+  </div>
+
+  <script>
+    (() => {
+      // -- Helpers --------------------------------------------------------
+      function showMsg(el: HTMLElement, text: string, kind: 'ok' | 'err') {
+        el.textContent = text;
+        el.className = `msg ${kind}`;
+      }
+      function hideMsg(el: HTMLElement) { el.textContent = ''; el.className = 'msg'; }
+
+      function setLoading(btn: HTMLButtonElement, loading: boolean, label: string) {
+        btn.disabled = loading;
+        btn.textContent = loading ? 'Aguarde\u2026' : label;
+      }
+
+      function setStatus(el: HTMLElement | null, text: string, kind: 'ok' | 'err' | '') {
+        if (!el) return;
+        el.textContent = text;
+        el.className = `upload-status${kind ? ' ' + kind : ''}`;
+      }
+
+      function typeBadgeHTML(type: string): { label: string; bg: string; color: string } {
+        switch (type) {
+          case 'main':       return { label: 'Principal',  bg: 'rgba(34,197,94,0.15)',  color: '#22c55e' };
+          case 'order_bump': return { label: 'Order Bump', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' };
+          case 'brinde':     return { label: 'Brinde',     bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' };
+          default:           return { label: type,          bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' };
+        }
+      }
+
+      // -- Element refs ---------------------------------------------------
+      const globalMsg      = document.getElementById('global-msg')       as HTMLElement;
+      const editPanel      = document.getElementById('edit-panel')       as HTMLElement;
+      const editPanelId    = document.getElementById('edit-panel-id')    as HTMLElement;
+      const editMsg        = document.getElementById('edit-msg')         as HTMLElement;
+      const editId         = document.getElementById('edit-id')          as HTMLInputElement;
+      const editName       = document.getElementById('edit-name')        as HTMLInputElement;
+      const editDesc       = document.getElementById('edit-description') as HTMLTextAreaElement;
+      const editPrice      = document.getElementById('edit-price')       as HTMLInputElement;
+      const editType       = document.getElementById('edit-type')        as HTMLSelectElement;
+      const editOrder      = document.getElementById('edit-sort-order')  as HTMLInputElement;
+      const editIsActive   = document.getElementById('edit-is-active')   as HTMLSelectElement;
+      const saveEditBtn    = document.getElementById('save-edit-btn')    as HTMLButtonElement;
+      const cancelEditBtn  = document.getElementById('cancel-edit-btn')  as HTMLButtonElement;
+      const closeEditBtn   = document.getElementById('close-edit-btn')   as HTMLButtonElement;
+      const assetSection   = document.getElementById('asset-section')    as HTMLElement;
+      const assetFileInput = document.getElementById('asset-file-input') as HTMLInputElement;
+      const assetUploadBtn = document.getElementById('asset-upload-btn') as HTMLButtonElement;
+      const assetStatus    = document.getElementById('asset-upload-status') as HTMLElement;
+      const assetCurrentPath = document.getElementById('asset-current-path') as HTMLElement;
+      const createMsg      = document.getElementById('create-msg')       as HTMLElement;
+      const createName     = document.getElementById('create-name')      as HTMLInputElement;
+      const createDesc     = document.getElementById('create-description') as HTMLTextAreaElement;
+      const createPrice    = document.getElementById('create-price')     as HTMLInputElement;
+      const createType     = document.getElementById('create-type')      as HTMLSelectElement;
+      const createOrder    = document.getElementById('create-sort-order') as HTMLInputElement;
+      const createBtn      = document.getElementById('create-btn')       as HTMLButtonElement;
+      const productsTbody  = document.getElementById('products-body')    as HTMLTableSectionElement;
+
+      // -- Toggle asset section visibility based on type ------------------
+      function updateAssetVisibility() {
+        if (editType.value === 'order_bump') {
+          assetSection.classList.remove('hidden');
+        } else {
+          assetSection.classList.add('hidden');
+        }
+      }
+      editType.addEventListener('change', updateAssetVisibility);
+
+      // -- Edit panel open/close ------------------------------------------
+      function openEditPanel(btn: HTMLElement) {
+        hideMsg(editMsg);
+        setStatus(assetStatus, '', '');
+        assetFileInput.value = '';
+
+        const id = btn.dataset.id ?? '';
+        editId.value          = id;
+        editName.value        = btn.dataset.name ?? '';
+        editDesc.value        = btn.dataset.description ?? '';
+        editPrice.value       = btn.dataset.price ?? '0';
+        editType.value        = btn.dataset.type ?? 'main';
+        editOrder.value       = btn.dataset.sortOrder ?? '0';
+        editIsActive.value    = btn.dataset.isActive ?? 'true';
+        editPanelId.textContent = id;
+
+        const assetPath = btn.dataset.assetPath ?? '';
+        assetCurrentPath.textContent = assetPath ? `Atual: ${assetPath}` : '';
+
+        updateAssetVisibility();
+        editPanel.classList.add('open');
+        editPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function closeEditPanel() { editPanel.classList.remove('open'); }
+      closeEditBtn.addEventListener('click', closeEditPanel);
+      cancelEditBtn.addEventListener('click', closeEditPanel);
+
+      // -- Save product ---------------------------------------------------
+      saveEditBtn.addEventListener('click', async () => {
+        const id = editId.value;
+        if (!id) return;
+
+        setLoading(saveEditBtn, true, 'Salvar produto');
+        hideMsg(editMsg);
+
+        try {
+          const res = await fetch('/api/admin/products/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              name:        editName.value.trim(),
+              description: editDesc.value.trim() || null,
+              price:       editPrice.value !== '' ? Number(editPrice.value) : 0,
+              type:        editType.value,
+              sort_order:  editOrder.value !== '' ? Number(editOrder.value) : 0,
+              is_active:   editIsActive.value === 'true',
+            }),
+          });
+
+          setLoading(saveEditBtn, false, 'Salvar produto');
+
+          if (res.ok) {
+            showMsg(editMsg, 'Produto atualizado com sucesso.', 'ok');
+            updateTableRow(id, {
+              name:      editName.value.trim(),
+              description: editDesc.value.trim(),
+              price:     editPrice.value,
+              type:      editType.value,
+              sortOrder: editOrder.value,
+              isActive:  editIsActive.value === 'true',
+            });
+            // Update data attributes on the edit button
+            const row = productsTbody.querySelector(`tr[data-id="${id}"]`);
+            const eb  = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) {
+              eb.dataset.name        = editName.value.trim();
+              eb.dataset.description = editDesc.value.trim();
+              eb.dataset.price       = editPrice.value;
+              eb.dataset.type        = editType.value;
+              eb.dataset.sortOrder   = editOrder.value;
+              eb.dataset.isActive    = editIsActive.value;
+            }
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            showMsg(editMsg, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(saveEditBtn, false, 'Salvar produto');
+          showMsg(editMsg, 'Erro de rede. Verifique a conex\u00e3o.', 'err');
+        }
+      });
+
+      // -- Upload asset ---------------------------------------------------
+      assetUploadBtn.addEventListener('click', async () => {
+        const file = assetFileInput.files?.[0];
+        const productId = editId.value;
+        if (!file) { setStatus(assetStatus, 'Selecione um arquivo', 'err'); return; }
+        if (!productId) return;
+
+        const origLabel = assetUploadBtn.textContent ?? 'Enviar arquivo';
+        setLoading(assetUploadBtn, true, origLabel);
+        setStatus(assetStatus, '', '');
+
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('product_id', productId);
+        fd.append('asset_type', 'asset');
+
+        try {
+          const res = await fetch('/api/admin/products/upload', { method: 'POST', body: fd });
+          setLoading(assetUploadBtn, false, origLabel);
+          if (res.ok) {
+            const { path } = await res.json() as { path: string };
+            setStatus(assetStatus, '\u2713 Enviado', 'ok');
+            assetCurrentPath.textContent = `Atual: ${path}`;
+            assetFileInput.value = '';
+            // Update data attribute
+            const row = productsTbody.querySelector(`tr[data-id="${productId}"]`);
+            const eb  = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) eb.dataset.assetPath = path;
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            setStatus(assetStatus, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(assetUploadBtn, false, origLabel);
+          setStatus(assetStatus, 'Erro de rede', 'err');
+        }
+      });
+
+      // -- Update table row -----------------------------------------------
+      function updateTableRow(id: string, data: {
+        name: string; description: string; price: string; type: string;
+        sortOrder: string; isActive: boolean;
+      }) {
+        const row = productsTbody.querySelector(`tr[data-id="${id}"]`) as HTMLTableRowElement | null;
+        if (!row) return;
+        const cells = row.querySelectorAll('td');
+
+        // cells: [0]=tipo [1]=nome [2]=preco [3]=status [4]=acoes
+        if (cells[0]) {
+          const tb = typeBadgeHTML(data.type);
+          const badge = cells[0].querySelector('.badge') as HTMLElement;
+          if (badge) {
+            badge.textContent = tb.label;
+            badge.style.background = tb.bg;
+            badge.style.color = tb.color;
+          }
+        }
+
+        if (cells[1]) {
+          cells[1].textContent = '';
+          const strong = document.createElement('strong');
+          strong.textContent = data.name;
+          cells[1].appendChild(strong);
+          if (data.description) {
+            const sp = document.createElement('span');
+            sp.style.cssText = 'display:block;font-size:0.78rem;color:var(--muted);margin-top:2px;';
+            sp.textContent = data.description.slice(0, 80);
+            cells[1].appendChild(sp);
+          }
+        }
+
+        if (cells[2]) {
+          const priceNum = data.price !== '' ? Number(data.price) : 0;
+          cells[2].innerHTML = 'R$&nbsp;' + priceNum.toFixed(2).replace('.', ',');
+        }
+
+        if (cells[3]) {
+          const badge = cells[3].querySelector('.badge') as HTMLElement | null;
+          if (badge) {
+            badge.textContent = data.isActive ? 'Ativo' : 'Inativo';
+            badge.className = `badge ${data.isActive ? 'active' : 'inactive'}`;
+          }
+        }
+
+        const toggleBtn = row.querySelector<HTMLButtonElement>('.toggle-btn');
+        if (toggleBtn) {
+          toggleBtn.textContent = data.isActive ? 'Desativar' : 'Ativar';
+          toggleBtn.dataset.isActive = String(data.isActive);
+        }
+      }
+
+      // -- Toggle ---------------------------------------------------------
+      async function handleToggle(btn: HTMLButtonElement) {
+        const id = btn.dataset.id ?? '';
+        const currentlyActive = btn.dataset.isActive === 'true';
+        const origLabel = btn.textContent ?? '';
+
+        // The update endpoint requires 'name', so grab it from the edit button
+        const row = productsTbody.querySelector(`tr[data-id="${id}"]`);
+        const eb  = row?.querySelector<HTMLButtonElement>('.edit-btn');
+        const name = eb?.dataset.name ?? '';
+
+        setLoading(btn, true, origLabel);
+        hideMsg(globalMsg);
+
+        try {
+          const res = await fetch('/api/admin/products/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, name, is_active: !currentlyActive }),
+          });
+
+          setLoading(btn, false, origLabel);
+
+          if (res.ok) {
+            const newActive = !currentlyActive;
+            btn.dataset.isActive = String(newActive);
+            btn.textContent = newActive ? 'Desativar' : 'Ativar';
+            const row = productsTbody.querySelector(`tr[data-id="${id}"]`);
+            const badge = row?.querySelector('td:nth-child(4) .badge') as HTMLElement | null;
+            if (badge) {
+              badge.textContent = newActive ? 'Ativo' : 'Inativo';
+              badge.className = `badge ${newActive ? 'active' : 'inactive'}`;
+            }
+            const eb = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) eb.dataset.isActive = String(newActive);
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            showMsg(globalMsg, 'Erro ao alterar status: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(btn, false, origLabel);
+          showMsg(globalMsg, 'Erro de rede. Verifique a conex\u00e3o.', 'err');
+        }
+      }
+
+      // -- Create ---------------------------------------------------------
+      createBtn.addEventListener('click', async () => {
+        const name = createName.value.trim();
+        if (!name || name.length < 2) {
+          showMsg(createMsg, 'O campo Nome deve ter pelo menos 2 caracteres.', 'err');
+          createName.focus();
+          return;
+        }
+
+        const price = Number(createPrice.value);
+        if (isNaN(price) || price < 0) {
+          showMsg(createMsg, 'Pre\u00e7o inv\u00e1lido.', 'err');
+          createPrice.focus();
+          return;
+        }
+
+        setLoading(createBtn, true, 'Criar produto');
+        hideMsg(createMsg);
+
+        try {
+          const res = await fetch('/api/admin/products/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              description: createDesc.value.trim() || null,
+              price,
+              type:       createType.value,
+              sort_order: createOrder.value !== '' ? Number(createOrder.value) : 0,
+            }),
+          });
+
+          setLoading(createBtn, false, 'Criar produto');
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            showMsg(createMsg, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+            return;
+          }
+
+          const { product } = await res.json() as { ok: boolean; product: {
+            id: string; name: string; description: string | null; price: number;
+            type: string; sort_order: number | null; is_active: boolean;
+            cover_path: string | null; asset_path: string | null;
+          }};
+
+          showMsg(createMsg, 'Produto criado com sucesso!', 'ok');
+          createName.value = ''; createDesc.value = '';
+          createPrice.value = '0.00'; createType.value = 'main'; createOrder.value = '0';
+
+          // Append new row
+          const tr = document.createElement('tr');
+          tr.dataset.id = product.id;
+
+          const tdType = document.createElement('td');
+          const tb = typeBadgeHTML(product.type);
+          const typeBadgeEl = document.createElement('span');
+          typeBadgeEl.className = 'badge';
+          typeBadgeEl.style.cssText = `background: ${tb.bg}; color: ${tb.color};`;
+          typeBadgeEl.textContent = tb.label;
+          tdType.appendChild(typeBadgeEl);
+
+          const tdName = document.createElement('td');
+          const strong = document.createElement('strong');
+          strong.textContent = product.name;
+          tdName.appendChild(strong);
+          if (product.description) {
+            const sp = document.createElement('span');
+            sp.style.cssText = 'display:block;font-size:0.78rem;color:var(--muted);margin-top:2px;';
+            sp.textContent = product.description.slice(0, 80);
+            tdName.appendChild(sp);
+          }
+
+          const tdPrice = document.createElement('td');
+          tdPrice.innerHTML = 'R$&nbsp;' + Number(product.price).toFixed(2).replace('.', ',');
+
+          const tdStatus = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.className = `badge ${product.is_active ? 'active' : 'inactive'}`;
+          badge.textContent = product.is_active ? 'Ativo' : 'Inativo';
+          tdStatus.appendChild(badge);
+
+          const tdActions = document.createElement('td');
+          const ac = document.createElement('div');
+          ac.className = 'action-cell';
+
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn-sm edit-btn';
+          editBtn.textContent = 'Editar';
+          Object.assign(editBtn.dataset, {
+            id: product.id,
+            name: product.name,
+            description: product.description ?? '',
+            price: String(product.price),
+            type: product.type,
+            isActive: String(product.is_active),
+            sortOrder: product.sort_order != null ? String(product.sort_order) : '0',
+            coverPath: product.cover_path ?? '',
+            assetPath: product.asset_path ?? '',
+          });
+
+          const toggleBtn = document.createElement('button');
+          toggleBtn.className = 'btn-sm toggle-btn';
+          toggleBtn.textContent = product.is_active ? 'Desativar' : 'Ativar';
+          toggleBtn.dataset.id = product.id;
+          toggleBtn.dataset.isActive = String(product.is_active);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn-danger delete-btn';
+          deleteBtn.textContent = 'Excluir';
+          deleteBtn.dataset.id = product.id;
+          deleteBtn.dataset.name = product.name;
+
+          ac.appendChild(editBtn);
+          ac.appendChild(toggleBtn);
+          ac.appendChild(deleteBtn);
+          tdActions.appendChild(ac);
+
+          tr.appendChild(tdType);
+          tr.appendChild(tdName);
+          tr.appendChild(tdPrice);
+          tr.appendChild(tdStatus);
+          tr.appendChild(tdActions);
+
+          productsTbody.appendChild(tr);
+          attachRowListeners(tr);
+        } catch {
+          setLoading(createBtn, false, 'Criar produto');
+          showMsg(createMsg, 'Erro de rede. Verifique a conex\u00e3o.', 'err');
+        }
+      });
+
+      // -- Delete ---------------------------------------------------------
+      async function handleDelete(btn: HTMLButtonElement) {
+        const id   = btn.dataset.id ?? '';
+        const name = btn.dataset.name ?? 'este produto';
+        if (!id) return;
+
+        if (!window.confirm(`Excluir "${name}" permanentemente? Esta ação não pode ser desfeita.`)) return;
+
+        btn.disabled = true;
+        hideMsg(globalMsg);
+
+        try {
+          const res = await fetch('/api/admin/products/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+
+          if (res.ok) {
+            const row = productsTbody.querySelector(`tr[data-id="${id}"]`);
+            row?.remove();
+            showMsg(globalMsg, `Produto "${name}" excluído com sucesso.`, 'ok');
+            // Close edit panel if it was open for this product
+            if (editId.value === id) closeEditPanel();
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            btn.disabled = false;
+            showMsg(globalMsg, 'Erro ao excluir: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          btn.disabled = false;
+          showMsg(globalMsg, 'Erro de rede. Verifique a conex\u00e3o.', 'err');
+        }
+      }
+
+      // -- Row listeners --------------------------------------------------
+      function attachRowListeners(row: HTMLTableRowElement) {
+        row.querySelector<HTMLButtonElement>('.edit-btn')?.addEventListener('click', e => {
+          openEditPanel(e.currentTarget as HTMLElement);
+        });
+        row.querySelector<HTMLButtonElement>('.toggle-btn')?.addEventListener('click', e => {
+          void handleToggle(e.currentTarget as HTMLButtonElement);
+        });
+        row.querySelector<HTMLButtonElement>('.delete-btn')?.addEventListener('click', e => {
+          void handleDelete(e.currentTarget as HTMLButtonElement);
+        });
+      }
+
+      productsTbody.querySelectorAll('tr').forEach(tr => attachRowListeners(tr as HTMLTableRowElement));
+    })();
+  </script>
+</AdminLayout>

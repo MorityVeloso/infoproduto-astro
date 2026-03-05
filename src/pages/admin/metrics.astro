@@ -4,7 +4,7 @@ export const prerender = false;
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { requireAdmin } from '../../lib/require-admin';
 import { createAdminClient } from '../../lib/supabase/admin';
-import { computeSummary, computeTimeseries, computeBreakdown, computeFunnel } from '../../lib/metrics';
+import { computeSummary, computeTimeseries, computeFunnel } from '../../lib/metrics';
 
 const result = await requireAdmin(Astro.request);
 if (result.redirectUrl) return Astro.redirect(result.redirectUrl);
@@ -17,7 +17,7 @@ const admin = createAdminClient();
 // Summary data (all paid + refunded, all time)
 const { data: allOrders } = await admin
   .from('orders')
-  .select('status, paid_at, amount_total, selected_model, selected_size, created_at')
+  .select('status, paid_at, amount_total, created_at')
   .in('status', ['paid', 'refunded']);
 
 // Timeseries data (paid in last DAYS)
@@ -26,19 +26,6 @@ const { data: tsOrders } = await admin
   .select('paid_at, amount_total')
   .eq('status', 'paid')
   .gte('paid_at', since);
-
-// Breakdown data (paid in last DAYS)
-const { data: bdOrders } = await admin
-  .from('orders')
-  .select('selected_model, selected_size')
-  .eq('status', 'paid')
-  .gte('paid_at', since);
-
-// Models for name resolution
-const { data: modelsData } = await admin.from('models').select('id, name');
-const modelNames = Object.fromEntries(
-  (modelsData ?? []).map((m: { id: string; name: string }) => [m.id, m.name]),
-);
 
 // Funnel: events (may not exist)
 const { data: evData, error: evError } = await admin
@@ -66,13 +53,12 @@ const { data: paidCountData } = await admin
 
 // Aggregate
 const now         = new Date();
-const summary     = computeSummary(allOrders ?? [], modelNames, now);
+const summary     = computeSummary(allOrders ?? [], now);
 const timeseries  = computeTimeseries(
   (tsOrders ?? []).filter(r => r.paid_at) as { paid_at: string; amount_total: number }[],
   DAYS,
   now,
 );
-const breakdown   = computeBreakdown(bdOrders ?? [], modelNames);
 const funnel      = computeFunnel(events, paidCountData?.length ?? 0);
 
 // A/B aggregation
@@ -116,13 +102,6 @@ const maxRevenue = Math.max(...timeseries.map(d => d.revenue), 1);
     .bar-fill  { width: 100%; border-radius: 2px 2px 0 0; min-height: 2px; background: var(--color-accent); }
     .bar-date  { font-size: 0.45rem; color: var(--color-muted); margin-top: 3px;
                  writing-mode: vertical-rl; transform: rotate(180deg); }
-    /* breakdown */
-    .bd-row    { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
-    .bd-lbl    { font-size: 0.82rem; width: 110px; flex-shrink: 0; white-space: nowrap;
-                 overflow: hidden; text-overflow: ellipsis; }
-    .bd-track  { flex: 1; background: var(--color-border); border-radius: 4px; height: 12px; }
-    .bd-bar    { background: var(--color-accent2); border-radius: 4px; height: 12px; min-width: 2px; }
-    .bd-meta   { font-size: 0.75rem; color: var(--color-muted); width: 64px; text-align: right; flex-shrink: 0; }
     /* funnel */
     .fn-step   { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.45rem 0;
                  border-bottom: 1px solid var(--color-border); }
@@ -159,8 +138,6 @@ const maxRevenue = Math.max(...timeseries.map(d => d.revenue), 1);
       <div class="chip"><p class="chip-lbl">Vendas 30d</p>     <p class="chip-val">{summary.sales.d30}</p></div>
       <div class="chip"><p class="chip-lbl">Ticket médio</p>   <p class="chip-val">{brl(summary.avgTicket.d30)}</p></div>
       <div class="chip"><p class="chip-lbl">Reembolsos</p>     <p class="chip-val">{summary.refunds.d30}</p></div>
-      <div class="chip"><p class="chip-lbl">Top modelo</p>     <p class="chip-val">{summary.topModel?.name ?? '—'}</p></div>
-      <div class="chip"><p class="chip-lbl">Top tamanho</p>    <p class="chip-val">{summary.topSize?.size ?? '—'}</p></div>
     </div>
   </div>
 
@@ -182,36 +159,6 @@ const maxRevenue = Math.max(...timeseries.map(d => d.revenue), 1);
     <p style="font-size: 0.72rem; color: var(--color-muted); margin-top: 0.3rem;">
       Altura proporcional à receita diária. Passe o mouse para ver valores.
     </p>
-  </div>
-
-  <!-- Breakdown: model -->
-  <div class="sec">
-    <h2 class="sec-h">Distribuição por modelo (30d)</h2>
-    {breakdown.byModel.length === 0
-      ? <p style="color: var(--color-muted); font-size: 0.875rem;">Sem dados no período.</p>
-      : breakdown.byModel.map(m => (
-          <div class="bd-row">
-            <span class="bd-lbl">{m.name}</span>
-            <div class="bd-track"><div class="bd-bar" style={`width: ${m.pct}%`}></div></div>
-            <span class="bd-meta">{m.count} · {m.pct}%</span>
-          </div>
-        ))
-    }
-  </div>
-
-  <!-- Breakdown: size -->
-  <div class="sec">
-    <h2 class="sec-h">Distribuição por tamanho (30d)</h2>
-    {breakdown.bySize.length === 0
-      ? <p style="color: var(--color-muted); font-size: 0.875rem;">Sem dados no período.</p>
-      : breakdown.bySize.map(s => (
-          <div class="bd-row">
-            <span class="bd-lbl">{s.size}</span>
-            <div class="bd-track"><div class="bd-bar" style={`width: ${s.pct}%`}></div></div>
-            <span class="bd-meta">{s.count} · {s.pct}%</span>
-          </div>
-        ))
-    }
   </div>
 
   <!-- Funnel -->

@@ -1,6 +1,5 @@
 // src/lib/metrics.ts
-// Métricas genéricas de funil e receita. Sem campos específicos de produto
-// (selected_model, selected_size foram removidos do skeleton).
+// Métricas genéricas de funil e receita.
 
 export interface OrderRow {
   status:       string;
@@ -92,11 +91,10 @@ export function computeFunnel(
   const counts: Record<string, number> = {};
 
   for (const name of FUNNEL_EVENTS) {
-    const forEvent    = events.filter(e => e.event === name);
-    const withSession = forEvent.filter(e => e.session_id != null);
-    counts[name] = withSession.length > 0
-      ? new Set(withSession.map(e => e.session_id)).size
-      : forEvent.length;
+    const forEvent = events.filter(e => e.event === name);
+    const sessionIds = new Set(forEvent.filter(e => e.session_id).map(e => e.session_id));
+    const noSidCount = forEvent.filter(e => !e.session_id).length;
+    counts[name] = sessionIds.size + noSidCount;
   }
 
   const steps: FunnelStep[] = [

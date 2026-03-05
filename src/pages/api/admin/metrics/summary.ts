@@ -18,16 +18,10 @@ export const GET: APIRoute = async ({ request }) => {
 
   const { data: orders, error } = await admin
     .from('orders')
-    .select('status, paid_at, amount_total, selected_model, selected_size, created_at')
+    .select('status, paid_at, amount_total, created_at')
     .in('status', ['paid', 'refunded']);
 
   if (error) return json({ error: error.message }, 500);
 
-  const { data: modelsData, error: modelsError } = await admin.from('models').select('id, name');
-  if (modelsError) return json({ error: modelsError.message }, 500);
-  const modelNames = Object.fromEntries(
-    (modelsData ?? []).map((m: { id: string; name: string }) => [m.id, m.name]),
-  );
-
-  return json(computeSummary(orders ?? [], modelNames, new Date()), 200);
+  return json(computeSummary(orders ?? [], new Date()), 200);
 };

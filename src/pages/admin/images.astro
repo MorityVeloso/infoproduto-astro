@@ -196,31 +196,62 @@ const slots = [
         status.className = 'status-msg';
         status.textContent = 'Enviando…';
 
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('key', key);
-
         try {
-          const res  = await fetch('/api/admin/site-settings/upload', { method: 'POST', body: fd });
-          const json = await res.json() as { ok?: boolean; url?: string; error?: string };
-
-          if (!res.ok || !json.ok) {
+          // 1. Obter URL assinada para upload direto ao Supabase (bypassa Cloudflare WAF)
+          const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+          const urlRes  = await fetch('/api/admin/site-settings/upload-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, ext }),
+          });
+          const urlJson = await urlRes.json() as { ok?: boolean; signedUrl?: string; path?: string; error?: string };
+          if (!urlRes.ok || !urlJson.ok) {
             status.className = 'status-msg err';
-            status.textContent = json.error ?? 'Erro ao enviar.';
+            status.textContent = urlJson.error ?? 'Erro ao iniciar upload.';
             btn.disabled = false;
             return;
           }
 
-          // Update preview
+          // 2. Upload direto para o Supabase Storage (sem passar pelo Cloudflare)
+          const putRes = await fetch(urlJson.signedUrl!, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file,
+          });
+          if (!putRes.ok) {
+            status.className = 'status-msg err';
+            status.textContent = `Erro no upload (${putRes.status}).`;
+            btn.disabled = false;
+            return;
+          }
+
+          // 3. Salvar path no site_settings
+          const saveRes  = await fetch('/api/admin/site-settings/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, value: urlJson.path! }),
+          });
+          const saveJson = await saveRes.json() as { ok?: boolean; error?: string };
+          if (!saveRes.ok || !saveJson.ok) {
+            status.className = 'status-msg err';
+            status.textContent = saveJson.error ?? 'Erro ao salvar imagem.';
+            btn.disabled = false;
+            return;
+          }
+
+          // 4. Atualizar preview
+          const SUPABASE_URL = import.meta.env.PUBLIC_SUPABASE_URL as string;
+          const newUrl = `${SUPABASE_URL}/storage/v1/object/public/site-images/${urlJson.path!}?t=${Date.now()}`;
           const previewEl = document.getElementById(`preview-${key}`);
           if (previewEl) {
             if (previewEl.tagName === 'IMG') {
-              (previewEl as HTMLImageElement).src = json.url! + '?t=' + Date.now();
+              (previewEl as HTMLImageElement).src = newUrl;
             } else {
               const img = document.createElement('img');
-              img.src = json.url! + '?t=' + Date.now();
+              img.src = newUrl;
               img.alt = key;
               img.id  = `preview-${key}`;
+              img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
               previewEl.replaceWith(img);
             }
           }

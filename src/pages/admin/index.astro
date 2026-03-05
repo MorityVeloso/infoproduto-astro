@@ -13,15 +13,10 @@ const { profile } = result;
 const admin = createAdminClient();
 const { data: orders } = await admin
   .from('orders')
-  .select('status, paid_at, amount_total, selected_model, selected_size, created_at')
+  .select('status, paid_at, amount_total, created_at')
   .in('status', ['paid', 'refunded']);
 
-const { data: modelsData } = await admin.from('models').select('id, name');
-const modelNames = Object.fromEntries(
-  (modelsData ?? []).map((m: { id: string; name: string }) => [m.id, m.name]),
-);
-
-const s = computeSummary(orders ?? [], modelNames, new Date());
+const s = computeSummary(orders ?? [], new Date());
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -72,16 +67,6 @@ const brl = (n: number) =>
     <div class="kpi-card">
       <p class="kpi-label">Reembolsos</p>
       <p class="kpi-value">{s.refunds.d30}</p>
-    </div>
-    <div class="kpi-card">
-      <p class="kpi-label">Modelo mais escolhido</p>
-      <p class="kpi-value" style="font-size: 1.35rem;">{s.topModel?.name ?? '—'}</p>
-      {s.topModel && <p class="kpi-sub">{s.topModel.count} pedidos</p>}
-    </div>
-    <div class="kpi-card">
-      <p class="kpi-label">Tamanho mais escolhido</p>
-      <p class="kpi-value" style="font-size: 1.35rem;">{s.topSize?.size ?? '—'}</p>
-      {s.topSize && <p class="kpi-sub">{s.topSize.count} pedidos</p>}
     </div>
   </div>
 

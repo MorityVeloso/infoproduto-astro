@@ -6,6 +6,7 @@ node_modules/
 # Build output
 dist/
 .astro/
+.vercel/
 
 # Environment variables — NUNCA commite estes arquivos
 .env
@@ -20,6 +21,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# Misc
+.serena/
+firebase-debug.log
 
 # Editor
 .DS_Store

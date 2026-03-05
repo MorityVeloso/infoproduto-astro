@@ -66,7 +66,6 @@ const { profile } = result;
               <th>E-mail</th>
               <th>Pedidos</th>
               <th>Último pago</th>
-              <th>Modelo / Tamanho</th>
               <th>Acesso</th>
             </tr>
           </thead>
@@ -114,8 +113,6 @@ const { profile } = result;
             <thead>
               <tr>
                 <th>Status</th>
-                <th>Modelo</th>
-                <th>Tam.</th>
                 <th>Valor</th>
                 <th>PDF</th>
               </tr>
@@ -136,9 +133,6 @@ const { profile } = result;
 
   <script>
     (() => {
-      const MODEL_LABELS = { safari: 'Safari', jardim: 'Jardim', amendoa: 'Amêndoa' };
-      const modelLabel = (m) => MODEL_LABELS[m] ?? m ?? '—';
-
       const fmt = {
         date: (s) => s ? new Date(s).toLocaleDateString('pt-BR') : '—',
         money: (n) => n != null ? `R$ ${Number(n).toFixed(2).replace('.', ',')}` : '—',
@@ -200,18 +194,13 @@ const { profile } = result;
           const tdLastPaid = document.createElement('td');
           tdLastPaid.textContent = fmt.date(c.last_paid_at);
 
-          const tdModel = document.createElement('td');
-          tdModel.textContent = c.selected_model
-            ? `${modelLabel(c.selected_model)} / ${c.selected_size ?? '—'}`
-            : '—';
-
           const tdAccess = document.createElement('td');
           const badge = document.createElement('span');
           badge.classList.add('badge', c.entitlement_active ? 'active' : 'inactive');
           badge.textContent = c.entitlement_active ? 'Ativo' : 'Inativo';
           tdAccess.appendChild(badge);
 
-          tr.append(tdEmail, tdOrders, tdLastPaid, tdModel, tdAccess);
+          tr.append(tdEmail, tdOrders, tdLastPaid, tdAccess);
           tr.addEventListener('click', () => openDetail(c.id));
           tbody.appendChild(tr);
         }
@@ -262,17 +251,11 @@ const { profile } = result;
             const tdStatus = document.createElement('td');
             tdStatus.textContent = o.status;
 
-            const tdModel = document.createElement('td');
-            tdModel.textContent = modelLabel(o.selected_model);
-
-            const tdSize = document.createElement('td');
-            tdSize.textContent = o.selected_size ?? '—';
-
             const tdAmt = document.createElement('td');
             tdAmt.textContent = fmt.money(o.amount_total);
 
             const tdPdf = document.createElement('td');
-            if (o.status === 'paid' && o.selected_model && o.selected_size) {
+            if (o.status === 'paid') {
               const genBtn = document.createElement('button');
               genBtn.textContent = 'Gerar';
               genBtn.style.cssText = 'font-size:0.75rem;padding:0.15rem 0.4rem;cursor:pointer;';
@@ -288,7 +271,7 @@ const { profile } = result;
               tdPdf.textContent = '—';
             }
 
-            tr.append(tdStatus, tdModel, tdSize, tdAmt, tdPdf);
+            tr.append(tdStatus, tdAmt, tdPdf);
             ordersTbody.appendChild(tr);
           }
         } else {
