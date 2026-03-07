@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { createServerClient } from './supabase/server';
+import { createAdminClient } from './supabase/admin';
 
 export interface Profile {
   id:         string;
@@ -46,17 +47,12 @@ export async function requireUser(request: Request): Promise<{
 
 /**
  * Verifica se um userId pertence a um usuário admin.
- * Consulta a tabela profiles via server client (anon key + RLS).
+ * Usa admin client (service_role) para bypassar RLS — mais robusto que depender do accessToken.
  */
-export async function isAdmin(request: Request, userId: string): Promise<boolean> {
-  const { accessToken } = createServerClient(request);
+export async function isAdmin(_request: Request, userId: string): Promise<boolean> {
+  const adminDb = createAdminClient();
 
-  if (!accessToken) return false;
-
-  const { supabase: authedClient } = createServerClient(request);
-  await authedClient.auth.getUser(accessToken); // valida token
-
-  const { data, error } = await authedClient
+  const { data, error } = await adminDb
     .from('profiles')
     .select('role')
     .eq('id', userId)
@@ -69,17 +65,15 @@ export async function isAdmin(request: Request, userId: string): Promise<boolean
 
 /**
  * Retorna o profile do usuário a partir do userId.
- * Usa o server client com o access token do request.
+ * Usa admin client (service_role) para bypassar RLS.
  */
 export async function getProfile(
-  request: Request,
+  _request: Request,
   userId: string
 ): Promise<Profile | null> {
-  const { supabase, accessToken } = createServerClient(request);
+  const adminDb = createAdminClient();
 
-  if (!accessToken) return null;
-
-  const { data, error } = await supabase
+  const { data, error } = await adminDb
     .from('profiles')
     .select('id, email, role, created_at')
     .eq('id', userId)

@@ -30,7 +30,7 @@ const { data: tsOrders } = await admin
 // Funnel: events (may not exist)
 const { data: evData, error: evError } = await admin
   .from('events')
-  .select('event, session_id')
+  .select('event_name, session_id')
   .gte('created_at', since);
 
 // A/B Test: events by variant
@@ -166,7 +166,7 @@ const maxRevenue = Math.max(...timeseries.map(d => d.revenue), 1);
     <h2 class="sec-h">Funil de conversão (30d)</h2>
     {funnel.steps.map((step, i) => (
       <div class="fn-step">
-        <span class="fn-event">{step.event}</span>
+        <span class="fn-event">{step.event_name}</span>
         <span class="fn-count">{step.count.toLocaleString('pt-BR')}</span>
         <span class="fn-rate">{i < funnel.rates.length ? '→ ' + pct(funnel.rates[i].rate) : ''}</span>
       </div>

@@ -2,7 +2,7 @@
  * list.ts — Retorna os asset keys disponíveis para o usuário + flags de existência.
  *
  * GET /api/assets/list
- * Autenticado. Valida: user → order pago + seleção completa → entitlement.
+ * Autenticado. Valida: user → order pago → entitlement.
  */
 
 export const prerender = false;
@@ -11,32 +11,28 @@ import type { APIRoute } from 'astro';
 import { getUserFromRequest } from '../../../lib/auth';
 import { createAdminClient } from '../../../lib/supabase/admin';
 import { buildAssetList, checkAssetExistence } from '../../../lib/assets';
-
-const H = { 'Content-Type': 'application/json' };
+import { jsonOk, jsonError } from '../../../lib/http';
 
 export const GET: APIRoute = async ({ request }) => {
   const user = await getUserFromRequest(request);
   if (!user) {
-    return new Response(JSON.stringify({ error: 'Não autenticado.' }), { status: 401, headers: H });
+    return jsonError({ error: 'Não autenticado.' }, 401);
   }
 
   const admin = createAdminClient();
 
-  // Busca order pago com seleção completa
+  // Busca order pago mais recente
   const { data: order } = await admin
     .from('orders')
-    .select('id, selected_model, selected_size, size_changes_used, selection_completed_at')
+    .select('id')
     .eq('customer_id', user.id)
     .eq('status', 'paid')
-    .not('selected_model', 'is', null)
-    .not('selection_completed_at', 'is', null)
+    .order('paid_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!order) {
-    return new Response(
-      JSON.stringify({ error: 'Pedido não encontrado ou seleção incompleta.' }),
-      { status: 404, headers: H }
-    );
+    return jsonError({ error: 'Pedido não encontrado.' }, 404);
   }
 
   // Verificar entitlement ativo
@@ -48,27 +44,13 @@ export const GET: APIRoute = async ({ request }) => {
     .maybeSingle();
 
   if (!entitlement) {
-    return new Response(
-      JSON.stringify({ error: 'Acesso não autorizado.' }),
-      { status: 403, headers: H }
-    );
+    return jsonError({ error: 'Acesso não autorizado.' }, 403);
   }
 
-  // Checar existência dos arquivos no Storage (4 chamadas paralelas)
   const [assets, existence] = await Promise.all([
-    Promise.resolve(buildAssetList(order.selected_model, order.selected_size)),
-    checkAssetExistence(admin, order.selected_model, order.selected_size),
+    Promise.resolve(buildAssetList()),
+    checkAssetExistence(admin),
   ]);
 
-  return new Response(
-    JSON.stringify({
-      orderId:         order.id,
-      model:           order.selected_model,
-      size:            order.selected_size,
-      sizeChangesUsed: order.size_changes_used,
-      assets,
-      existence,
-    }),
-    { status: 200, headers: H }
-  );
+  return jsonOk({ orderId: order.id, assets, existence });
 };

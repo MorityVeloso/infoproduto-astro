@@ -62,17 +62,29 @@ const redirectTo = Astro.url.searchParams.get('redirect') ?? '/app';
         const params   = new URLSearchParams(window.location.search);
         const hash     = new URLSearchParams(window.location.hash.slice(1));
 
+        // Detecta fluxo de recovery (reset de senha) via URL ou evento Supabase
+        let isRecovery = hash.get('type') === 'recovery' || params.get('type') === 'recovery';
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+          if (event === 'PASSWORD_RECOVERY') isRecovery = true;
+        });
+
+        function redirectAfterAuth(session: import('@supabase/supabase-js').Session) {
+          subscription.unsubscribe();
+          syncSessionToCookies(session);
+          window.location.replace(isRecovery ? '/auth/reset-password' : redirectTo);
+        }
+
         // ── Caminho 1: PKCE — Supabase envia ?code= na URL ──
         const code = params.get('code');
         if (code) {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error || !data.session) {
+            subscription.unsubscribe();
             statusMsg.textContent = 'Link inválido ou expirado. Tente novamente.';
             setTimeout(() => { window.location.href = '/login'; }, 2500);
             return;
           }
-          syncSessionToCookies(data.session);
-          window.location.replace(redirectTo);
+          redirectAfterAuth(data.session);
           return;
         }
 
@@ -81,16 +93,17 @@ const redirectTo = Astro.url.searchParams.get('redirect') ?? '/app';
         if (accessToken) {
           const { data, error } = await supabase.auth.getSession();
           if (error || !data.session) {
+            subscription.unsubscribe();
             statusMsg.textContent = 'Link inválido ou expirado. Tente novamente.';
             setTimeout(() => { window.location.href = '/login'; }, 2500);
             return;
           }
-          syncSessionToCookies(data.session);
-          window.location.replace(redirectTo);
+          redirectAfterAuth(data.session);
           return;
         }
 
         // ── Nenhum parâmetro encontrado ──
+        subscription.unsubscribe();
         statusMsg.textContent = 'Parâmetros inválidos. Redirecionando…';
         setTimeout(() => { window.location.href = '/login'; }, 2000);
       }

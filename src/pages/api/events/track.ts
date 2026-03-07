@@ -20,6 +20,8 @@ const ALLOWED_EVENTS = new Set([
   'purchase_confirmed', // retorna na página de sucesso
 ]);
 
+const ALLOWED_VARIANTS = new Set(['dark', 'light', 'unknown']);
+
 interface TrackBody {
   event_name:    string;
   email?:        string;
@@ -54,7 +56,7 @@ export const POST: APIRoute = async ({ request }) => {
     email:        body.email        ?? null,
     order_id:     body.order_id     ?? null,
     session_id:   body.session_id   ?? null,
-    variant:      body.variant      ?? null,
+    variant:      (body.variant && ALLOWED_VARIANTS.has(body.variant)) ? body.variant : null,
     utm_source:   body.utm_source   ?? null,
     utm_medium:   body.utm_medium   ?? null,
     utm_campaign: body.utm_campaign ?? null,

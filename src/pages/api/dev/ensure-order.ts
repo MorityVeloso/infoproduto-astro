@@ -13,7 +13,7 @@ import { getUserFromRequest } from '../../../lib/auth';
 import { createAdminClient } from '../../../lib/supabase/admin';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-const PRODUCT_CODE = 'QUARTO_DE_BEBE';
+const PRODUCT_CODE = 'MAIN_PRODUCT';
 
 export const POST: APIRoute = async ({ request }) => {
   // Guard: apenas em desenvolvimento

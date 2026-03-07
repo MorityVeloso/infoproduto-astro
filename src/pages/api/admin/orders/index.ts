@@ -40,7 +40,7 @@ export const GET: APIRoute = async ({ request }) => {
   let query = admin
     .from('orders')
     .select(
-      'id, customer_id, customer_email, status, amount_total, selected_model, selected_size, created_at, paid_at, email_sent_at',
+      'id, customer_id, customer_email, status, amount_total, created_at, paid_at, email_sent_at',
       { count: 'exact' },
     );
 

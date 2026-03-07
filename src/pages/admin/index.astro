@@ -20,59 +20,139 @@ const s = computeSummary(orders ?? [], new Date());
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const hour = new Date().getHours();
+const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+const dateStr = new Date().toLocaleDateString('pt-BR', {
+  weekday: 'long', day: 'numeric', month: 'long',
+});
+const firstName = profile.email.split('@')[0].replace(/[._-]/g, ' ').split(' ')[0];
+const displayName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+
+const maxRev = Math.max(s.revenue.today, s.revenue.d7, s.revenue.d30, s.revenue.total, 1);
+const maxSales = Math.max(s.sales.today, s.sales.d7, s.sales.d30, s.sales.total, 1);
+const pct = (v: number, max: number) => `${Math.round((v / max) * 100)}%`;
 ---
 
 <AdminLayout title="Dashboard — Admin" email={profile.email}>
   <style>
-    .section-title { font-size: 0.75rem; color: var(--color-muted); text-transform: uppercase;
-                     letter-spacing: 0.06em; margin: 1.5rem 0 0.6rem; font-weight: 600; }
-    .kpi-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.85rem; }
-    .kpi-card  { background: var(--color-surface); border: 1px solid var(--color-border);
-                 border-radius: var(--radius-md); padding: 1rem 1.25rem; }
-    .kpi-label { font-size: 0.72rem; color: var(--color-muted); text-transform: uppercase;
-                 letter-spacing: 0.04em; margin-bottom: 0.35rem; }
-    .kpi-value { font-size: 1.85rem; font-family: var(--font-serif); font-weight: 400; line-height: 1.1; }
-    .kpi-sub   { font-size: 0.78rem; color: var(--color-muted); margin-top: 0.3rem; }
+    /* -- Dashboard token overrides (customize via CSS vars) -- */
+    :root {
+      --dash-accent: var(--color-accent, #b08968);
+      --dash-accent-rgb: var(--color-accent-rgb, 176, 137, 104);
+      --dash-card-bg: var(--color-surface, rgba(255,255,255,0.03));
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes glowPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+
+    .dash-header { margin-bottom: 1.75rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--color-border); animation: fadeInUp 0.6s ease-out both; }
+    .dash-greeting { font-family: var(--font-serif); font-size: 1.85rem; font-weight: 400; line-height: 1.2; color: var(--color-text); margin: 0 0 0.2rem; }
+    .dash-date { font-size: 0.82rem; color: var(--color-muted); text-transform: capitalize; margin: 0; }
+
+    .quick-actions { display: flex; gap: 0.5rem; margin-bottom: 2rem; overflow-x: auto; scrollbar-width: none; animation: fadeInUp 0.6s ease-out 0.08s both; }
+    .quick-actions::-webkit-scrollbar { display: none; }
+    .qa-btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.9rem; font-size: 0.78rem; font-family: var(--font-sans); color: var(--color-muted); text-decoration: none; background: var(--dash-card-bg); border: 1px solid var(--color-border); border-radius: 8px; white-space: nowrap; flex-shrink: 0; transition: all 0.2s ease; }
+    .qa-btn:hover { color: var(--color-text); background: rgba(var(--dash-accent-rgb), 0.07); border-color: rgba(var(--dash-accent-rgb), 0.3); transform: translateY(-1px); }
+
+    .hero-card { position: relative; padding: 2rem 2.25rem; margin-bottom: 2.25rem; border-radius: 16px; border: 1px solid rgba(var(--dash-accent-rgb), 0.2); background: linear-gradient(135deg, var(--color-surface, rgba(17,24,39,0.95)), rgba(var(--dash-accent-rgb), 0.08)); backdrop-filter: blur(16px); overflow: hidden; animation: fadeInUp 0.6s ease-out 0.14s both; }
+    .hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, rgba(var(--dash-accent-rgb), 0.6), transparent); background-size: 200% 100%; animation: shimmer 3s linear infinite; }
+    .hero-glow { position: absolute; top: -50%; right: -15%; width: 320px; height: 320px; border-radius: 50%; background: radial-gradient(circle, rgba(var(--dash-accent-rgb), 0.12), transparent 70%); pointer-events: none; animation: glowPulse 4s ease-in-out infinite; }
+    .hero-content { position: relative; z-index: 1; display: flex; align-items: center; gap: 1.5rem; }
+    .hero-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: rgba(var(--dash-accent-rgb), 0.12); color: var(--dash-accent); flex-shrink: 0; }
+    .hero-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dash-accent); font-weight: 600; margin: 0 0 0.2rem; }
+    .hero-value { font-family: var(--font-serif); font-size: 2.6rem; font-weight: 500; line-height: 1.1; color: var(--color-text); margin: 0 0 0.2rem; }
+    .hero-sub { font-size: 0.8rem; color: var(--color-muted); margin: 0; }
+
+    .section-divider { display: flex; align-items: center; gap: 0.65rem; margin: 2rem 0 0.85rem; }
+    .section-divider-icon { color: var(--color-muted); display: flex; align-items: center; opacity: 0.65; }
+    .section-label { font-size: 0.7rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; white-space: nowrap; margin: 0; }
+    .section-line { flex: 1; height: 1px; background: linear-gradient(to right, var(--color-border), transparent); }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; }
+    .kpi-card { background: var(--dash-card-bg); backdrop-filter: blur(12px); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.15rem 1.25rem; position: relative; overflow: hidden; transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease; animation: fadeInUp 0.5s ease-out both; animation-delay: calc(var(--delay, 0) * 70ms); }
+    .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.22); border-color: rgba(var(--dash-accent-rgb), 0.25); }
+    .kpi-card--accent { border-bottom: 2px solid rgba(var(--dash-accent-rgb), 0.45); }
+    .kpi-card--accent:hover { border-bottom-color: rgba(var(--dash-accent-rgb), 0.8); box-shadow: 0 8px 28px rgba(var(--dash-accent-rgb), 0.08); }
+    .kpi-card--danger { border-bottom: 2px solid rgba(239,68,68,0.45); }
+    .kpi-card--danger:hover { border-bottom-color: rgba(239,68,68,0.8); }
+
+    .kpi-header { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.65rem; }
+    .kpi-icon { color: var(--color-muted); display: flex; align-items: center; opacity: 0.6; }
+    .kpi-label { font-size: 0.68rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; margin: 0; }
+    .kpi-value { font-size: 1.75rem; font-family: var(--font-serif); font-weight: 400; line-height: 1.1; color: var(--color-text); margin: 0; }
+
+    .kpi-bar { margin-top: 0.7rem; height: 3px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; }
+    .kpi-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0.28)); transition: width 0.8s ease-out; min-width: 2px; }
+    .kpi-bar-fill--accent { background: linear-gradient(90deg, rgba(var(--dash-accent-rgb), 0.25), rgba(var(--dash-accent-rgb), 0.55)); }
+
+    .dash-footer { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--color-border); text-align: center; animation: fadeInUp 0.6s ease-out 1s both; }
+    .dash-footer p { font-size: 0.76rem; color: var(--color-muted); margin: 0; }
+    .dash-footer a { color: var(--dash-accent); text-decoration: none; font-weight: 500; }
+    .dash-footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 1024px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .hero-value { font-size: 2.1rem; } }
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .dash-greeting { font-size: 1.4rem; }
+      .hero-card { padding: 1.5rem; }
+      .hero-content { flex-direction: column; align-items: flex-start; gap: 0.85rem; }
+      .hero-value { font-size: 1.9rem; }
+      .hero-icon { width: 44px; height: 44px; border-radius: 10px; }
+    }
   </style>
 
-  <h1 style="font-family: var(--font-serif); font-size: 1.75rem; font-weight: 400; margin-bottom: 0.25rem;">
-    Dashboard
-  </h1>
-  <p style="color: var(--color-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">
-    Dados em tempo real
-  </p>
+  <header class="dash-header">
+    <h1 class="dash-greeting">{greeting}, {displayName}</h1>
+    <p class="dash-date">{dateStr}</p>
+  </header>
 
-  <p class="section-title">Receita</p>
-  <div class="kpi-grid">
-    <div class="kpi-card"><p class="kpi-label">Hoje</p>         <p class="kpi-value">{brl(s.revenue.today)}</p></div>
-    <div class="kpi-card"><p class="kpi-label">Últimos 7d</p>   <p class="kpi-value">{brl(s.revenue.d7)}</p></div>
-    <div class="kpi-card"><p class="kpi-label">Últimos 30d</p>  <p class="kpi-value">{brl(s.revenue.d30)}</p></div>
-    <div class="kpi-card"><p class="kpi-label">Total</p>        <p class="kpi-value">{brl(s.revenue.total)}</p></div>
-  </div>
+  <nav class="quick-actions" aria-label="Atalhos rapidos">
+    <a href="/admin/orders" class="qa-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Pedidos</a>
+    <a href="/admin/customers" class="qa-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clientes</a>
+    <a href="/admin/metrics" class="qa-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Metricas</a>
+    <a href="/admin/products" class="qa-btn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Produtos</a>
+  </nav>
 
-  <p class="section-title">Vendas (pedidos pagos)</p>
-  <div class="kpi-grid">
-    <div class="kpi-card"><p class="kpi-label">Hoje</p>         <p class="kpi-value">{s.sales.today}</p></div>
-    <div class="kpi-card"><p class="kpi-label">Últimos 7d</p>   <p class="kpi-value">{s.sales.d7}</p></div>
-    <div class="kpi-card"><p class="kpi-label">Últimos 30d</p>  <p class="kpi-value">{s.sales.d30}</p></div>
-    <div class="kpi-card"><p class="kpi-label">Total</p>        <p class="kpi-value">{s.sales.total}</p></div>
-  </div>
-
-  <p class="section-title">Outros indicadores (30d)</p>
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <p class="kpi-label">Ticket médio</p>
-      <p class="kpi-value">{brl(s.avgTicket.d30)}</p>
-    </div>
-    <div class="kpi-card">
-      <p class="kpi-label">Reembolsos</p>
-      <p class="kpi-value">{s.refunds.d30}</p>
+  <div class="hero-card">
+    <div class="hero-glow"></div>
+    <div class="hero-content">
+      <div class="hero-icon"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div>
+        <p class="hero-label">Receita Total</p>
+        <p class="hero-value">{brl(s.revenue.total)}</p>
+        <p class="hero-sub">{s.sales.total} {s.sales.total === 1 ? 'pedido realizado' : 'pedidos realizados'}</p>
+      </div>
     </div>
   </div>
 
-  <p style="margin-top: 2rem;">
-    <a href="/admin/metrics" style="color: var(--color-accent2); font-size: 0.875rem; text-decoration: underline;">
-      Ver métricas detalhadas →
-    </a>
-  </p>
+  <div class="section-divider"><span class="section-divider-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span><h2 class="section-label">Receita</h2><div class="section-line"></div></div>
+  <div class="kpi-grid">
+    <div class="kpi-card kpi-card--accent" style="--delay:0"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><p class="kpi-label">Hoje</p></div><p class="kpi-value">{brl(s.revenue.today)}</p><div class="kpi-bar"><div class="kpi-bar-fill kpi-bar-fill--accent" style={`width:${pct(s.revenue.today, maxRev)}`}></div></div></div>
+    <div class="kpi-card kpi-card--accent" style="--delay:1"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><p class="kpi-label">Ultimos 7d</p></div><p class="kpi-value">{brl(s.revenue.d7)}</p><div class="kpi-bar"><div class="kpi-bar-fill kpi-bar-fill--accent" style={`width:${pct(s.revenue.d7, maxRev)}`}></div></div></div>
+    <div class="kpi-card kpi-card--accent" style="--delay:2"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><p class="kpi-label">Ultimos 30d</p></div><p class="kpi-value">{brl(s.revenue.d30)}</p><div class="kpi-bar"><div class="kpi-bar-fill kpi-bar-fill--accent" style={`width:${pct(s.revenue.d30, maxRev)}`}></div></div></div>
+  </div>
+
+  <div class="section-divider"><span class="section-divider-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span><h2 class="section-label">Vendas (pedidos pagos)</h2><div class="section-line"></div></div>
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--delay:4"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><p class="kpi-label">Hoje</p></div><p class="kpi-value">{s.sales.today}</p><div class="kpi-bar"><div class="kpi-bar-fill" style={`width:${pct(s.sales.today, maxSales)}`}></div></div></div>
+    <div class="kpi-card" style="--delay:5"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><p class="kpi-label">Ultimos 7d</p></div><p class="kpi-value">{s.sales.d7}</p><div class="kpi-bar"><div class="kpi-bar-fill" style={`width:${pct(s.sales.d7, maxSales)}`}></div></div></div>
+    <div class="kpi-card" style="--delay:6"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><p class="kpi-label">Ultimos 30d</p></div><p class="kpi-value">{s.sales.d30}</p><div class="kpi-bar"><div class="kpi-bar-fill" style={`width:${pct(s.sales.d30, maxSales)}`}></div></div></div>
+    <div class="kpi-card" style="--delay:7"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 7 6 12 12 7 18 18 18"/></svg></span><p class="kpi-label">Total</p></div><p class="kpi-value">{s.sales.total}</p><div class="kpi-bar"><div class="kpi-bar-fill" style="width:100%"></div></div></div>
+  </div>
+
+  <div class="section-divider"><span class="section-divider-icon"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><h2 class="section-label">Indicadores (30d)</h2><div class="section-line"></div></div>
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--delay:8"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg></span><p class="kpi-label">Ticket medio</p></div><p class="kpi-value">{brl(s.avgTicket.d30)}</p></div>
+    <div class={`kpi-card ${s.refunds.d30 > 0 ? 'kpi-card--danger' : ''}`} style="--delay:9"><div class="kpi-header"><span class="kpi-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span><p class="kpi-label">Reembolsos</p></div><p class="kpi-value">{s.refunds.d30}</p></div>
+  </div>
+
+  <footer class="dash-footer"><p>Atualizado agora &middot; <a href="/admin/metrics">Ver metricas detalhadas &rarr;</a></p></footer>
 </AdminLayout>

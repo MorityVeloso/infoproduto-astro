@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
     const { error } = await admin.from('entitlements').upsert(
       {
         customer_id:  customerId,
-        product_code: 'QUARTO_DE_BEBE',
+        product_code: 'MAIN_PRODUCT',
         active:       true,
         granted_at:   new Date().toISOString(),
         revoked_at:   null,
@@ -42,7 +42,7 @@ export const POST: APIRoute = async ({ request }) => {
       .from('entitlements')
       .update({ active: false, revoked_at: new Date().toISOString() })
       .eq('customer_id', customerId)
-      .eq('product_code', 'QUARTO_DE_BEBE');
+      .eq('product_code', 'MAIN_PRODUCT');
     if (error) return json({ error: error.message }, 500);
   }
 

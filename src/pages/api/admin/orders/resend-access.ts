@@ -26,7 +26,7 @@ import { createAdminClient } from '../../../../lib/supabase/admin';
 import { sendAccessEmail } from '../../../../lib/email';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PRODUCT_CODE = 'QUARTO_DE_BEBE';
+const PRODUCT_CODE = 'MAIN_PRODUCT';
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {

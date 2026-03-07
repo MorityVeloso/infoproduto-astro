@@ -23,7 +23,6 @@ import { createAdminClient } from '../../../lib/supabase/admin';
 import { provisionAccess } from '../../../lib/provision-access';
 import { jsonOk, jsonError } from '../../../lib/http';
 import { checkRateLimit, getClientIp } from '../../../lib/ratelimit';
-import { PRODUCT } from '../../../config/product';
 
 const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -52,10 +51,9 @@ interface AsaasCheckout {
 }
 
 interface AsaasWebhook {
-  event:        string;
-  accessToken?: string;
-  payment?:     AsaasPayment;
-  checkout?:    AsaasCheckout;
+  event:     string;
+  payment?:  AsaasPayment;
+  checkout?: AsaasCheckout;
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -69,10 +67,15 @@ export const POST: APIRoute = async ({ request }) => {
     return jsonOk({ ok: true, skipped: true });
   }
 
-  const expectedToken = import.meta.env.ASAAS_WEBHOOK_TOKEN as string | undefined;
-  if (expectedToken && body.accessToken !== expectedToken) {
-    console.error('[webhook/asaas] authToken inválido');
-    return jsonError({ error: 'unauthorized' }, 401, requestId);
+  // Validar authToken via header (Asaas envia no header asaas-access-token)
+  // process.env para runtime — import.meta.env é inlinado em build time pelo Vite
+  const expectedToken = (process.env.ASAAS_WEBHOOK_TOKEN ?? import.meta.env.ASAAS_WEBHOOK_TOKEN) as string | undefined;
+  if (expectedToken) {
+    const receivedToken = request.headers.get('asaas-access-token');
+    if (receivedToken !== expectedToken) {
+      console.error('[webhook/asaas] authToken inválido — header:', receivedToken?.slice(0, 8) ?? '(ausente)');
+      return jsonError({ error: 'unauthorized' }, 401, requestId);
+    }
   }
 
   if (LIFECYCLE_EVENTS.has(body.event)) {
@@ -93,12 +96,6 @@ export const POST: APIRoute = async ({ request }) => {
     return jsonOk({ ok: true, status: payment.status });
   }
 
-  // Valida valor mínimo (com tolerância de R$ 0,01 para arredondamentos)
-  if (payment.value < PRODUCT.payment.minAmount - 0.01) {
-    console.error('[webhook/asaas] Valor inesperado:', payment.value);
-    return jsonError({ error: 'amount_mismatch' }, 422, requestId);
-  }
-
   const orderId = payment.externalReference;
   if (!orderId || !UUID_RE.test(orderId)) {
     console.error('[webhook/asaas] externalReference inválido:', orderId);
@@ -109,7 +106,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const { data: order, error: orderErr } = await admin
     .from('orders')
-    .select('id, status, customer_email, customer_id, customer_name')
+    .select('id, status, customer_email, customer_id, customer_name, amount_total')
     .eq('id', orderId)
     .maybeSingle();
 
@@ -120,6 +117,12 @@ export const POST: APIRoute = async ({ request }) => {
 
   if (order.status === 'paid') {
     return jsonOk({ ok: true, idempotent: true });
+  }
+
+  // Validar valor contra amount_total do pedido (tolerância R$0,01 para arredondamentos)
+  if (payment.value < Number(order.amount_total) - 0.01) {
+    console.error('[webhook/asaas] Valor inesperado:', payment.value, 'esperado:', order.amount_total);
+    return jsonError({ error: 'amount_mismatch' }, 422, requestId);
   }
 
   const email = order.customer_email;

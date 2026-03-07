@@ -6,8 +6,9 @@
 -->
 <script is:inline>
 (function() {
-  // Só redireciona se NÃO estamos já no callback
-  if (window.location.pathname === '/auth/callback') return;
+  // Não interceptar páginas de auth que já tratam os tokens
+  var p = window.location.pathname;
+  if (p === '/auth/callback' || p === '/auth/reset-password') return;
 
   var hash = window.location.hash;
   var search = window.location.search;
@@ -17,7 +18,11 @@
   var hasPKCECode = search && search.indexOf('code=') !== -1;
 
   if (hasImplicitToken || hasPKCECode) {
-    window.location.replace('/auth/callback' + search + hash);
+    // Detecta fluxo de recovery (reset de senha) pelo type=recovery no hash ou search
+    var isRecovery = (hash && hash.indexOf('type=recovery') !== -1) ||
+                     (search && search.indexOf('type=recovery') !== -1);
+    var target = isRecovery ? '/auth/reset-password' : '/auth/callback';
+    window.location.replace(target + search + hash);
   }
 })();
 </script>

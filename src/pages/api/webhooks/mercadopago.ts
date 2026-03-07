@@ -29,7 +29,7 @@ import { jsonOk, jsonError } from '../../../lib/http';
 import { checkRateLimit, getClientIp } from '../../../lib/ratelimit';
 
 const AMOUNT_EXPECTED = 147.00;
-const PRODUCT_CODE    = 'QUARTO_DE_BEBE';
+const PRODUCT_CODE    = 'MAIN_PRODUCT';
 
 // Extrai paymentId da notificação do MP (suporta formatos antigo e novo)
 function extractPaymentId(body: unknown): string | null {

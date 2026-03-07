@@ -1,15 +1,16 @@
+const VARIANT_KEY = '__ab_variant';
+const SID_KEY     = '__sid';
+const UTM_KEY     = '__utms';
 const UTM_KEYS    = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const;
 
 export function getVariant(): string {
   try {
-    const m = document.cookie.match(/(?:^|;\s*)__ab_variant=([^;]+)/);
+    const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${VARIANT_KEY}=([^;]+)`));
     return m ? m[1] : 'unknown';
   } catch {
     return 'unknown';
   }
 }
-const SID_KEY  = '__sid';
-const UTM_KEY  = '__utms';
 
 let _fallbackSid: string | null = null;
 

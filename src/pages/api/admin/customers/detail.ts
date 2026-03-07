@@ -36,7 +36,7 @@ export const GET: APIRoute = async ({ request }) => {
   // Orders (all, newest first)
   const { data: orders, error: ordersErr } = await admin
     .from('orders')
-    .select('id, status, amount_total, selected_model, selected_size, created_at, paid_at, customer_email')
+    .select('id, status, amount_total, created_at, paid_at, customer_email')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false });
 
@@ -47,7 +47,7 @@ export const GET: APIRoute = async ({ request }) => {
     .from('entitlements')
     .select('customer_id, product_code, active, granted_at, revoked_at')
     .eq('customer_id', customerId)
-    .eq('product_code', 'QUARTO_DE_BEBE')
+    .eq('product_code', 'MAIN_PRODUCT')
     .maybeSingle();
 
   if (entErr) return json({ error: entErr.message }, 500);

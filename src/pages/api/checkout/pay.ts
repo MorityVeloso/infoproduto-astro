@@ -57,8 +57,9 @@ async function createCustomer(apiKey: string, name: string, email: string, cpfCn
   return data.id;
 }
 
+/** Cria cobrança PIX no Asaas. */
 async function createPixCharge(
-  apiKey: string, customerId: string, orderId: string, amount: number,
+  apiKey: string, customerId: string, orderId: string, amount: number, description: string,
 ): Promise<string> {
   const res = await fetch(`${asaasBaseUrl()}/payments`, {
     method:  'POST',
@@ -68,7 +69,7 @@ async function createPixCharge(
       billingType:       'PIX',
       value:             amount,
       dueDate:           tomorrowDate(),
-      description:       PRODUCT.description,
+      description,
       externalReference: orderId,
     }),
   });
@@ -95,9 +96,13 @@ async function fetchPixQrCode(
 }
 
 async function createCardCharge(
-  apiKey: string, customerId: string, orderId: string, amount: number,
-  card: { holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string; cpfCnpj: string; email: string; installments: number },
+  apiKey: string, customerId: string, orderId: string, amount: number, description: string,
+  card: { holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string; cpfCnpj: string; email: string; phone: string; postalCode: string; addressNumber: string; installments: number },
 ): Promise<{ status: string; paymentId: string }> {
+  const installments = card.installments > 1
+    ? { installmentCount: card.installments, installmentValue: +(amount / card.installments).toFixed(2) }
+    : {};
+
   const res = await fetch(`${asaasBaseUrl()}/payments`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'access_token': apiKey },
@@ -106,9 +111,9 @@ async function createCardCharge(
       billingType:       'CREDIT_CARD',
       value:             amount,
       dueDate:           tomorrowDate(),
-      description:       PRODUCT.description,
+      description,
       externalReference: orderId,
-      installmentCount:  card.installments,
+      ...installments,
       creditCard: {
         holderName:  card.holderName,
         number:      card.number.replace(/\D/g, ''),
@@ -117,9 +122,13 @@ async function createCardCharge(
         ccv:         card.ccv,
       },
       creditCardHolderInfo: {
-        name:    card.holderName,
-        email:   card.email,
-        cpfCnpj: card.cpfCnpj,
+        name:          card.holderName,
+        email:         card.email,
+        cpfCnpj:       card.cpfCnpj,
+        phone:         card.phone,
+        mobilePhone:   card.phone,
+        postalCode:    card.postalCode,
+        addressNumber: card.addressNumber,
       },
     }),
   });
@@ -142,21 +151,24 @@ class CardDeclineError extends Error {
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
 interface CardInput {
-  holderName:   string;
-  number:       string;
-  expiryMonth:  string;
-  expiryYear:   string;
-  ccv:          string;
-  installments: number;
+  holderName:    string;
+  number:        string;
+  expiryMonth:   string;
+  expiryYear:    string;
+  ccv:           string;
+  installments:  number;
+  postalCode:    string;
+  addressNumber: string;
 }
 
 interface PayBody {
-  order_id:       string;
-  customer_name:  string;
-  customer_email: string;
-  customer_cpf:   string;
-  payment_method: 'pix' | 'credit_card';
-  card?:          CardInput;
+  order_id:        string;
+  customer_name:   string;
+  customer_email:  string;
+  customer_cpf:    string;
+  customer_phone?: string;
+  payment_method:  'pix' | 'credit_card';
+  card?:           CardInput;
 }
 
 // ── Handler ─────────────────────────────────────────────────────────────────
@@ -206,6 +218,9 @@ export const POST: APIRoute = async ({ request }) => {
 
   if (orderErr || !order)
     return jsonError({ error: 'Pedido não encontrado.' }, 404, requestId);
+  // Validar valor do pedido
+  if (!order.amount_total || Number(order.amount_total) <= 0)
+    return jsonError({ error: 'Valor do pedido inválido.' }, 400, requestId);
   if (order.customer_email !== body.customer_email)
     return jsonError({ error: 'Dados do pedido inconsistentes.' }, 403, requestId);
   if (order.status === 'paid')
@@ -228,7 +243,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (body.payment_method === 'pix') {
     let paymentId: string;
     try {
-      paymentId = await createPixCharge(apiKey, asaasCustomerId, body.order_id, order.amount_total);
+      paymentId = await createPixCharge(apiKey, asaasCustomerId, body.order_id, order.amount_total, PRODUCT.description);
     } catch (err) {
       console.error('[checkout/pay] createPixCharge failed:', err);
       return jsonError({ error: 'Falha ao criar cobrança PIX. Tente novamente.' }, 502, requestId);
@@ -261,8 +276,11 @@ export const POST: APIRoute = async ({ request }) => {
   let result: { status: string; paymentId: string };
 
   try {
-    result = await createCardCharge(apiKey, asaasCustomerId, body.order_id, order.amount_total, {
-      ...card, cpfCnpj: body.customer_cpf, email,
+    const phone = (body.customer_phone ?? '').replace(/\D/g, '');
+    result = await createCardCharge(apiKey, asaasCustomerId, body.order_id, order.amount_total, PRODUCT.description, {
+      ...card, cpfCnpj: body.customer_cpf, email, phone,
+      postalCode: (card.postalCode ?? '').replace(/\D/g, ''),
+      addressNumber: card.addressNumber ?? '',
     });
   } catch (err) {
     if (err instanceof CardDeclineError)
@@ -288,8 +306,12 @@ export const POST: APIRoute = async ({ request }) => {
     ?? new URL(request.url).origin;
 
   if (isPaid) {
-    void provisionAccess(email, body.order_id, admin, baseUrl, name)
-      .catch(err => console.error('[checkout/pay] provisionAccess failed:', err));
+    // await garante que provisionAccess completa antes do serverless encerrar
+    try {
+      await provisionAccess(email, body.order_id, admin, baseUrl, name);
+    } catch (err) {
+      console.error('[checkout/pay] provisionAccess failed:', err);
+    }
   } else {
     void sendOrderCreatedEmail(name, email, {
       orderId: body.order_id, amount: order.amount_total, paymentMethod: 'credit_card',

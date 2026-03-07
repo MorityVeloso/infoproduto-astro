@@ -18,7 +18,7 @@ export interface SummaryResult {
 
 export interface TimeseriesRow { date: string; paid_orders: number; revenue: number; }
 
-export interface FunnelStep   { event: string; count: number; }
+export interface FunnelStep   { event_name: string; count: number; }
 export interface FunnelRate   { from: string; to: string; rate: number; }
 export interface FunnelResult { steps: FunnelStep[]; rates: FunnelRate[]; }
 
@@ -85,28 +85,28 @@ export function computeTimeseries(
 const FUNNEL_EVENTS = ['view_landing', 'click_cta', 'view_checkout', 'start_payment'] as const;
 
 export function computeFunnel(
-  events: { event: string; session_id: string | null }[],
+  events: { event_name: string; session_id: string | null }[],
   paidCount: number,
 ): FunnelResult {
   const counts: Record<string, number> = {};
 
   for (const name of FUNNEL_EVENTS) {
-    const forEvent = events.filter(e => e.event === name);
+    const forEvent = events.filter(e => e.event_name === name);
     const sessionIds = new Set(forEvent.filter(e => e.session_id).map(e => e.session_id));
     const noSidCount = forEvent.filter(e => !e.session_id).length;
     counts[name] = sessionIds.size + noSidCount;
   }
 
   const steps: FunnelStep[] = [
-    ...FUNNEL_EVENTS.map(name => ({ event: name, count: counts[name] })),
-    { event: 'paid_orders', count: paidCount },
+    ...FUNNEL_EVENTS.map(name => ({ event_name: name, count: counts[name] })),
+    { event_name: 'paid_orders', count: paidCount },
   ];
 
   const rates: FunnelRate[] = [];
   for (let i = 0; i < steps.length - 1; i++) {
     rates.push({
-      from: steps[i].event,
-      to:   steps[i + 1].event,
+      from: steps[i].event_name,
+      to:   steps[i + 1].event_name,
       rate: steps[i].count > 0 ? Math.round(steps[i + 1].count / steps[i].count * 100) / 100 : 0,
     });
   }

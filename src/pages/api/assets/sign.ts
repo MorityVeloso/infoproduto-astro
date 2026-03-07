@@ -1,5 +1,5 @@
 /**
- * sign.ts — Gera signed URL para um asset do kit.
+ * sign.ts — Gera signed URL para um asset do produto.
  *
  * POST /api/assets/sign
  * Body: { assetKey: string, action?: 'view' | 'download', session_id?: string }
@@ -43,22 +43,22 @@ export const POST: APIRoute = async ({ request }) => {
 
   const admin = createAdminClient();
 
-  // Busca order do usuário com seleção completa
+  // Busca order pago mais recente
   const { data: order } = await admin
     .from('orders')
-    .select('id, selected_model, selected_size')
+    .select('id')
     .eq('customer_id', user.id)
     .eq('status', 'paid')
-    .not('selected_model', 'is', null)
-    .not('selection_completed_at', 'is', null)
+    .order('paid_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!order) {
     return jsonError({ error: 'Pedido não encontrado.' }, 404, requestId);
   }
 
-  // Nunca assinar asset fora da lista permitida para este usuário
-  if (!isAllowedAsset(assetKey, order.selected_model, order.selected_size)) {
+  // Nunca assinar asset fora da lista permitida
+  if (!isAllowedAsset(assetKey)) {
     return jsonError({ error: 'Asset não autorizado.' }, 403, requestId);
   }
 
@@ -83,7 +83,7 @@ export const POST: APIRoute = async ({ request }) => {
     .from('protected-assets')
     .createSignedUrl(assetKey, SIGNED_URL_EXPIRES_SECONDS);
 
-  // Arquivo não encontrado no Storage — não é erro fatal no MVP
+  // Arquivo não encontrado no Storage — não é erro fatal
   if (storageError || !signed?.signedUrl) {
     return jsonOk({ url: null, notFound: true });
   }
