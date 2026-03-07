@@ -18,12 +18,10 @@ const { data: entitlement } = await admin
   .eq('active', true)
   .maybeSingle();
 
-if (!entitlement?.active) {
-  return Astro.redirect('/app');
-}
+const hasAccess = !!entitlement?.active;
 
-// Busca todos os produtos ativos com arquivo
-const assets = await getProductAssets(admin);
+// Busca produtos apenas se tem acesso
+const assets = hasAccess ? await getProductAssets(admin) : [];
 
 function typeBadge(type: string): { label: string; color: string; bg: string; border: string } {
   switch (type) {
@@ -39,15 +37,27 @@ function typeBadge(type: string): { label: string; color: string; bg: string; bo
   <!-- Page header -->
   <div class="page-header">
     <h1 class="page-title">Downloads</h1>
-    <p class="page-subtitle">Seu conteúdo está disponível abaixo</p>
+    <p class="page-subtitle">{hasAccess ? 'Seu conteúdo está disponível abaixo' : 'Acesso aos downloads'}</p>
   </div>
 
-  <div class="access-banner">
-    <span class="access-check">&#10003;</span>
-    <span>Acesso ativo — você pode baixar quantas vezes quiser</span>
-  </div>
+  {!hasAccess && (
+    <div class="pending-banner">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>
+        <p class="pending-title">Acesso pendente</p>
+        <p class="pending-text">Seu pagamento ainda está sendo processado. Assim que confirmado, seus downloads ficarão disponíveis aqui.</p>
+      </div>
+    </div>
+  )}
 
-  {assets.length === 0 && (
+  {hasAccess && (
+    <div class="access-banner">
+      <span class="access-check">&#10003;</span>
+      <span>Acesso ativo — você pode baixar quantas vezes quiser</span>
+    </div>
+  )}
+
+  {hasAccess && assets.length === 0 && (
     <div class="empty-state">
       <p>Nenhum arquivo disponível no momento.</p>
       <p class="empty-sub">Os arquivos serão disponibilizados em breve.</p>
@@ -55,7 +65,7 @@ function typeBadge(type: string): { label: string; color: string; bg: string; bo
   )}
 
   <!-- Product cards -->
-  <div class="products-grid">
+  {hasAccess && <div class="products-grid">
     {assets.map((asset, i) => {
       const badge = typeBadge(asset.type);
       const ext = asset.assetPath.split('.').pop()?.toUpperCase() ?? 'PDF';
@@ -81,7 +91,7 @@ function typeBadge(type: string): { label: string; color: string; bg: string; bo
         </div>
       );
     })}
-  </div>
+  </div>}
 
   <!-- Back link -->
   <div class="back-row">
@@ -181,6 +191,22 @@ function typeBadge(type: string): { label: string; color: string; bg: string; bo
     margin-bottom: 1.75rem;
   }
   .access-check { font-size: 0.9rem; font-weight: 700; flex-shrink: 0; }
+
+  /* -- Pending banner -- */
+  .pending-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 8px;
+    color: #f59e0b;
+    margin-bottom: 1.75rem;
+  }
+  .pending-banner svg { flex-shrink: 0; margin-top: 0.1rem; }
+  .pending-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .pending-text { font-size: 0.825rem; color: #d1d5db; line-height: 1.5; }
 
   /* -- Products grid -- */
   .products-grid {
