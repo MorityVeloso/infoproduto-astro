@@ -1,13 +1,10 @@
 /**
- * sign.ts — Gera signed URL para um asset do produto.
+ * sign.ts — Gera signed URL para um asset de produto.
  *
  * POST /api/assets/sign
  * Body: { assetKey: string, action?: 'view' | 'download', session_id?: string }
  *
- * Valida: user → rate limit → order → entitlement → asset na lista permitida.
- * action='download' (padrão): registra na tabela downloads.
- * action='view': registra evento asset_view na tabela events (fire-and-forget).
- * Retorna { url } ou { url: null, notFound: true } se o arquivo não existe.
+ * Valida: user -> rate limit -> order -> entitlement -> asset na lista de produtos ativos.
  */
 
 export const prerender = false;
@@ -15,7 +12,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getUserFromRequest } from '../../../lib/auth';
 import { createAdminClient } from '../../../lib/supabase/admin';
-import { isAllowedAsset } from '../../../lib/assets';
+import { getProductAssets, isAllowedAsset } from '../../../lib/assets';
 import { jsonOk, jsonError } from '../../../lib/http';
 import { checkRateLimit } from '../../../lib/ratelimit';
 
@@ -57,8 +54,11 @@ export const POST: APIRoute = async ({ request }) => {
     return jsonError({ error: 'Pedido não encontrado.' }, 404, requestId);
   }
 
+  // Busca assets dinâmicos da tabela products
+  const productAssets = await getProductAssets(admin);
+
   // Nunca assinar asset fora da lista permitida
-  if (!isAllowedAsset(assetKey)) {
+  if (!isAllowedAsset(assetKey, productAssets)) {
     return jsonError({ error: 'Asset não autorizado.' }, 403, requestId);
   }
 

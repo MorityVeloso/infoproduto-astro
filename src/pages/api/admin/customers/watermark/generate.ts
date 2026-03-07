@@ -2,18 +2,8 @@
  * generate.ts — Admin: Gera PDF personalizado com marca d'água para qualquer pedido.
  *
  * POST /api/admin/customers/watermark/generate
- * Body: { orderId: string }
+ * Body: { orderId: string, asset_key?: string }
  * Autenticado via cookie de sessão — requer role='admin'.
- *
- * Fluxo (admin):
- *   1. Autenticar usuário e verificar role='admin'
- *   2. Validar orderId
- *   3. Validar order (status=paid) — sem verificação de ownership ou entitlement
- *   4. Verificar se já existe kit-personalizado/{orderId}/projeto.pdf → {alreadyExists:true}
- *   5. Baixar PDF base de protected-assets
- *   6. Gerar PDF com marca d'água
- *   7. Upload para kit-personalizado/{orderId}/projeto.pdf
- *   8. Retornar {ok:true}
  */
 
 export const prerender = false;
@@ -25,63 +15,72 @@ import { generateWatermarkedPdf } from '../../../../../lib/pdf/watermark';
 
 const H                   = { 'Content-Type': 'application/json' };
 const BUCKET_BASE         = 'protected-assets';
-const BUCKET_PERSONALIZED = 'kit-personalizado';
-
+const BUCKET_PERSONALIZED = 'watermarked';
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), { status, headers: H });
 
 export const POST: APIRoute = async ({ request }) => {
-  // 1. Admin auth
   const user = await getUserFromRequest(request);
   if (!user) return json({ error: 'Não autorizado' }, 401);
 
   const profile = await getProfile(request, user.id);
   if (!profile || profile.role !== 'admin') return json({ error: 'Proibido' }, 403);
 
-  // 2. Parse body
-  const body    = await request.json().catch(() => null) as { orderId?: string } | null;
-  const orderId = body?.orderId?.trim();
+  const body     = await request.json().catch(() => null) as { orderId?: string; asset_key?: string } | null;
+  const orderId  = body?.orderId?.trim();
   if (!orderId) return json({ error: 'orderId obrigatório.' }, 400);
 
   const admin = createAdminClient();
 
-  // 3. Validate order exists and is paid (no ownership check, no entitlement check)
   const { data: order } = await admin
     .from('orders')
-    .select('id, customer_email, selected_model, selected_size, status')
+    .select('id, customer_id, customer_email, status')
     .eq('id', orderId)
     .maybeSingle();
 
   if (!order || order.status !== 'paid') {
     return json({ error: 'Pedido não encontrado.' }, 404);
   }
-  if (!order.selected_model || !order.selected_size) {
-    return json({ error: 'Seleção incompleta.' }, 422);
+
+  // Resolve asset_key: use provided or find main product's asset_path
+  let assetKey = body?.asset_key?.trim();
+  if (!assetKey) {
+    const { data: mainProduct } = await admin
+      .from('products')
+      .select('asset_path')
+      .eq('type', 'main')
+      .eq('is_active', true)
+      .not('asset_path', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    assetKey = (mainProduct?.asset_path as string) ?? null;
+    if (!assetKey) return json({ error: 'Nenhum produto principal com arquivo encontrado.' }, 404);
   }
 
-  const personalizedPath = `${orderId}/projeto.pdf`;
+  const safeName = assetKey.replace(/\//g, '_');
+  const customerId = order.customer_id as string;
+  const personalizedPath = `${customerId}/${safeName}`;
 
-  // 4. Check if already exists
+  // Check if already exists
   const { data: existingFiles } = await admin.storage
     .from(BUCKET_PERSONALIZED)
-    .list(orderId);
+    .list(customerId, { limit: 100 });
 
-  if (existingFiles?.some(f => f.name === 'projeto.pdf')) {
+  if (existingFiles?.some(f => f.name === safeName)) {
     return json({ alreadyExists: true }, 200);
   }
 
-  // 5. Download base PDF
-  const baseKey = `kit/${order.selected_model}/${order.selected_size}/projeto_base.pdf`;
+  // Download base PDF
   const { data: baseBlob, error: downloadErr } = await admin.storage
     .from(BUCKET_BASE)
-    .download(baseKey);
+    .download(assetKey);
 
   if (downloadErr || !baseBlob) {
     console.error('[admin/watermark/generate] base PDF download error:', downloadErr?.message ?? downloadErr);
     return json({ error: 'PDF base não encontrado.' }, 404);
   }
 
-  // 6. Generate watermarked PDF
+  // Generate watermarked PDF
   const basePdfBytes  = new Uint8Array(await baseBlob.arrayBuffer());
   const watermarkText = `Exclusivo para: ${order.customer_email} • Pedido: ${orderId}`;
 
@@ -93,7 +92,7 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Falha ao gerar PDF personalizado.' }, 500);
   }
 
-  // 7. Upload
+  // Upload
   const { error: uploadErr } = await admin.storage
     .from(BUCKET_PERSONALIZED)
     .upload(personalizedPath, watermarkedBytes, { contentType: 'application/pdf', upsert: false });

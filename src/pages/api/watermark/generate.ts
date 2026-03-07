@@ -2,17 +2,18 @@
  * generate.ts — Gera PDF personalizado com marca d'água e salva no Storage.
  *
  * POST /api/watermark/generate
- * Body: { orderId: string }
+ * Body: { asset_key: string }
  * Autenticado via cookie de sessão.
  *
  * Fluxo:
  *   1. Autenticar usuário
- *   2. Validar order (status=paid, customer_id=user.id, seleção completa)
- *   3. Verificar se já existe kit-personalizado/{orderId}/projeto.pdf → {alreadyExists:true}
- *   4. Baixar PDF base de protected-assets
- *   5. Gerar PDF com marca d'água
- *   6. Upload para kit-personalizado/{orderId}/projeto.pdf
- *   7. Retornar {ok:true}
+ *   2. Buscar order pago + entitlement
+ *   3. Validar asset_key contra produtos ativos
+ *   4. Verificar se já existe watermarked/{userId}/{safe_name} → retorna watermark_key
+ *   5. Baixar PDF base de protected-assets
+ *   6. Gerar PDF com marca d'água
+ *   7. Upload para watermarked/{userId}/{safe_name}
+ *   8. Retornar { watermark_key }
  */
 
 export const prerender = false;
@@ -23,48 +24,43 @@ import { createAdminClient } from '../../../lib/supabase/admin';
 import { generateWatermarkedPdf } from '../../../lib/pdf/watermark';
 import { jsonOk, jsonError } from '../../../lib/http';
 import { checkRateLimit } from '../../../lib/ratelimit';
+import { getProductAssets, isAllowedAsset } from '../../../lib/assets';
 
 const BUCKET_BASE         = 'protected-assets';
-const BUCKET_PERSONALIZED = 'kit-personalizado';
+const BUCKET_PERSONALIZED = 'watermarked';
 
 export const POST: APIRoute = async ({ request }) => {
   const requestId = crypto.randomUUID();
 
-  // ── 1. Auth ───────────────────────────────────────────────────
   const user = await getUserFromRequest(request);
   if (!user) {
     return jsonError({ error: 'Não autenticado.' }, 401, requestId);
   }
 
-  // ── Rate limit ────────────────────────────────────────────────
   const rl = checkRateLimit(`watermark-gen:${user.id}`, { maxTokens: 10, refillRate: 10 / 60 });
   if (!rl.allowed) return jsonError({ error: 'Rate limit excedido.' }, 429, requestId);
 
-  // ── 2. Parse body ─────────────────────────────────────────────
-  const body    = await request.json().catch(() => null) as { orderId?: string } | null;
-  const orderId = body?.orderId?.trim();
+  const body     = await request.json().catch(() => null) as { asset_key?: string } | null;
+  const assetKey = body?.asset_key?.trim();
 
-  if (!orderId) {
-    return jsonError({ error: 'orderId obrigatório.' }, 400, requestId);
+  if (!assetKey) {
+    return jsonError({ error: 'asset_key obrigatório.' }, 400, requestId);
   }
 
   const admin = createAdminClient();
 
-  // ── 3. Validar order ──────────────────────────────────────────
+  // Buscar order pago mais recente
   const { data: order } = await admin
     .from('orders')
-    .select('id, customer_id, customer_email, selected_model, selected_size, status')
-    .eq('id', orderId)
+    .select('id, customer_email')
+    .eq('customer_id', user.id)
+    .eq('status', 'paid')
+    .order('paid_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  if (!order || order.status !== 'paid') {
+  if (!order) {
     return jsonError({ error: 'Pedido não encontrado.' }, 404, requestId);
-  }
-  if (order.customer_id !== user.id) {
-    return jsonError({ error: 'Acesso não autorizado.' }, 403, requestId);
-  }
-  if (!order.selected_model || !order.selected_size) {
-    return jsonError({ error: 'Seleção incompleta.' }, 422, requestId);
   }
 
   // Verificar entitlement ativo
@@ -79,33 +75,40 @@ export const POST: APIRoute = async ({ request }) => {
     return jsonError({ error: 'Acesso não autorizado.' }, 403, requestId);
   }
 
-  const personalizedPath = `${orderId}/projeto.pdf`;
-
-  // ── 4. Verificar se já existe ─────────────────────────────────
-  const { data: existingFiles } = await admin.storage
-    .from(BUCKET_PERSONALIZED)
-    .list(orderId);
-
-  const alreadyExists = existingFiles?.some(f => f.name === 'projeto.pdf') ?? false;
-  if (alreadyExists) {
-    return jsonOk({ alreadyExists: true });
+  // Validar asset_key contra produtos ativos
+  const productAssets = await getProductAssets(admin);
+  if (!isAllowedAsset(assetKey, productAssets)) {
+    return jsonError({ error: 'Asset não autorizado.' }, 403, requestId);
   }
 
-  // ── 5. Baixar PDF base ────────────────────────────────────────
-  const baseKey = `kit/${order.selected_model}/${order.selected_size}/projeto_base.pdf`;
+  // Nome seguro para o arquivo watermarked: userId/safe_filename.pdf
+  const safeName = assetKey.replace(/\//g, '_');
+  const watermarkKey = `${user.id}/${safeName}`;
+
+  // Verificar se já existe
+  const { data: existingFiles } = await admin.storage
+    .from(BUCKET_PERSONALIZED)
+    .list(user.id, { limit: 100 });
+
+  const alreadyExists = existingFiles?.some(f => f.name === safeName) ?? false;
+  if (alreadyExists) {
+    return jsonOk({ watermark_key: watermarkKey });
+  }
+
+  // Baixar PDF base
   const { data: baseBlob, error: downloadErr } = await admin.storage
     .from(BUCKET_BASE)
-    .download(baseKey);
+    .download(assetKey);
 
   if (downloadErr || !baseBlob) {
     console.error('[watermark/generate] Erro ao baixar base PDF:', downloadErr);
     return jsonError({ error: 'PDF base não encontrado.' }, 404, requestId);
   }
 
-  // ── 6. Gerar PDF com marca d'água ─────────────────────────────
+  // Gerar PDF com marca d'água
   const basePdfBytes  = new Uint8Array(await baseBlob.arrayBuffer());
   const email         = order.customer_email ?? user.email ?? '';
-  const watermarkText = `Exclusivo para: ${email} • Pedido: ${orderId}`;
+  const watermarkText = `Exclusivo para: ${email}`;
 
   let watermarkedBytes: Uint8Array;
   try {
@@ -115,28 +118,26 @@ export const POST: APIRoute = async ({ request }) => {
     return jsonError({ error: 'Falha ao gerar PDF personalizado.' }, 500, requestId);
   }
 
-  // ── 7. Upload para kit-personalizado ──────────────────────────
+  // Upload
   const { error: uploadErr } = await admin.storage
     .from(BUCKET_PERSONALIZED)
-    .upload(personalizedPath, watermarkedBytes, {
+    .upload(watermarkKey, watermarkedBytes, {
       contentType: 'application/pdf',
       upsert:      false,
     });
 
   if (uploadErr) {
-    // Race condition: two concurrent requests passed the existence check simultaneously.
-    // The second upload fails with a duplicate error — treat it as alreadyExists, not a failure.
     const isDuplicate =
       uploadErr.message?.includes('already exists') ||
       (uploadErr as unknown as { statusCode?: string }).statusCode === '23505';
 
     if (isDuplicate) {
-      return jsonOk({ alreadyExists: true });
+      return jsonOk({ watermark_key: watermarkKey });
     }
 
     console.error('[watermark/generate] Erro ao fazer upload:', uploadErr);
     return jsonError({ error: 'Falha ao salvar PDF.' }, 500, requestId);
   }
 
-  return jsonOk({ ok: true });
+  return jsonOk({ watermark_key: watermarkKey });
 };

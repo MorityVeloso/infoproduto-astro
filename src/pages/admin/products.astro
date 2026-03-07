@@ -141,7 +141,6 @@ function typeBadge(type: string): { label: string; bg: string; color: string } {
 
     /* -- Asset section ------------------------------------------------- */
     .asset-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); }
-    .asset-section.hidden { display: none; }
     .asset-current { font-size: 0.78rem; color: var(--muted); margin-top: 0.35rem; word-break: break-all; }
 
     /* -- Create section ------------------------------------------------ */
@@ -284,16 +283,29 @@ function typeBadge(type: string): { label: string; bg: string; color: string } {
       </div>
     </div>
 
-    <!-- Asset upload (visible only for order_bump) -->
-    <div class="asset-section hidden" id="asset-section">
+    <!-- Asset upload -->
+    <div class="asset-section" id="asset-section">
       <div class="field">
-        <label>Arquivo Entreg&aacute;vel (PDF)</label>
+        <label>Arquivo Entreg&aacute;vel (PDF, ZIP, EPUB)</label>
         <div class="upload-row">
-          <input type="file" id="asset-file-input" accept=".pdf" />
+          <input type="file" id="asset-file-input" accept=".pdf,.zip,.epub" />
           <button class="btn-upload" id="asset-upload-btn">Enviar arquivo</button>
           <span id="asset-upload-status" class="upload-status"></span>
         </div>
         <div class="asset-current" id="asset-current-path"></div>
+      </div>
+    </div>
+
+    <!-- Cover upload -->
+    <div class="asset-section" id="cover-section">
+      <div class="field">
+        <label>Capa do produto (JPG, PNG, WEBP)</label>
+        <div class="upload-row">
+          <input type="file" id="cover-file-input" accept=".jpg,.jpeg,.png,.webp" />
+          <button class="btn-upload" id="cover-upload-btn">Enviar capa</button>
+          <span id="cover-upload-status" class="upload-status"></span>
+        </div>
+        <div class="asset-current" id="cover-current-path"></div>
       </div>
     </div>
 
@@ -388,11 +400,14 @@ function typeBadge(type: string): { label: string; bg: string; color: string } {
       const saveEditBtn    = document.getElementById('save-edit-btn')    as HTMLButtonElement;
       const cancelEditBtn  = document.getElementById('cancel-edit-btn')  as HTMLButtonElement;
       const closeEditBtn   = document.getElementById('close-edit-btn')   as HTMLButtonElement;
-      const assetSection   = document.getElementById('asset-section')    as HTMLElement;
       const assetFileInput = document.getElementById('asset-file-input') as HTMLInputElement;
       const assetUploadBtn = document.getElementById('asset-upload-btn') as HTMLButtonElement;
       const assetStatus    = document.getElementById('asset-upload-status') as HTMLElement;
       const assetCurrentPath = document.getElementById('asset-current-path') as HTMLElement;
+      const coverFileInput = document.getElementById('cover-file-input') as HTMLInputElement;
+      const coverUploadBtn = document.getElementById('cover-upload-btn') as HTMLButtonElement;
+      const coverStatus    = document.getElementById('cover-upload-status') as HTMLElement;
+      const coverCurrentPath = document.getElementById('cover-current-path') as HTMLElement;
       const createMsg      = document.getElementById('create-msg')       as HTMLElement;
       const createName     = document.getElementById('create-name')      as HTMLInputElement;
       const createDesc     = document.getElementById('create-description') as HTMLTextAreaElement;
@@ -401,16 +416,6 @@ function typeBadge(type: string): { label: string; bg: string; color: string } {
       const createOrder    = document.getElementById('create-sort-order') as HTMLInputElement;
       const createBtn      = document.getElementById('create-btn')       as HTMLButtonElement;
       const productsTbody  = document.getElementById('products-body')    as HTMLTableSectionElement;
-
-      // -- Toggle asset section visibility based on type ------------------
-      function updateAssetVisibility() {
-        if (editType.value === 'order_bump') {
-          assetSection.classList.remove('hidden');
-        } else {
-          assetSection.classList.add('hidden');
-        }
-      }
-      editType.addEventListener('change', updateAssetVisibility);
 
       // -- Edit panel open/close ------------------------------------------
       function openEditPanel(btn: HTMLElement) {
@@ -431,7 +436,11 @@ function typeBadge(type: string): { label: string; bg: string; color: string } {
         const assetPath = btn.dataset.assetPath ?? '';
         assetCurrentPath.textContent = assetPath ? `Atual: ${assetPath}` : '';
 
-        updateAssetVisibility();
+        const coverPath = btn.dataset.coverPath ?? '';
+        coverCurrentPath.textContent = coverPath ? `Atual: ${coverPath}` : '';
+        coverFileInput.value = '';
+        setStatus(coverStatus, '', '');
+
         editPanel.classList.add('open');
         editPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
@@ -531,6 +540,44 @@ function typeBadge(type: string): { label: string; bg: string; color: string } {
         } catch {
           setLoading(assetUploadBtn, false, origLabel);
           setStatus(assetStatus, 'Erro de rede', 'err');
+        }
+      });
+
+      // -- Upload cover ---------------------------------------------------
+      coverUploadBtn.addEventListener('click', async () => {
+        const file = coverFileInput.files?.[0];
+        const productId = editId.value;
+        if (!file) { setStatus(coverStatus, 'Selecione um arquivo', 'err'); return; }
+        if (!productId) return;
+
+        const origLabel = coverUploadBtn.textContent ?? 'Enviar capa';
+        setLoading(coverUploadBtn, true, origLabel);
+        setStatus(coverStatus, '', '');
+
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('product_id', productId);
+        fd.append('asset_type', 'cover');
+
+        try {
+          const res = await fetch('/api/admin/products/upload', { method: 'POST', body: fd });
+          setLoading(coverUploadBtn, false, origLabel);
+          if (res.ok) {
+            const { path } = await res.json() as { path: string };
+            setStatus(coverStatus, '\u2713 Enviado', 'ok');
+            coverCurrentPath.textContent = `Atual: ${path}`;
+            coverFileInput.value = '';
+            // Update data attribute
+            const row = productsTbody.querySelector(`tr[data-id="${productId}"]`);
+            const eb  = row?.querySelector<HTMLButtonElement>('.edit-btn');
+            if (eb) eb.dataset.coverPath = path;
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            setStatus(coverStatus, 'Erro: ' + (err.error ?? String(res.status)), 'err');
+          }
+        } catch {
+          setLoading(coverUploadBtn, false, origLabel);
+          setStatus(coverStatus, 'Erro de rede', 'err');
         }
       });
 

@@ -1,8 +1,9 @@
 /**
- * list.ts — Retorna os asset keys disponíveis para o usuário + flags de existência.
+ * list.ts — Retorna os assets disponíveis para o usuário.
  *
  * GET /api/assets/list
- * Autenticado. Valida: user → order pago → entitlement.
+ * Autenticado. Valida: user -> order pago -> entitlement.
+ * Retorna lista dinâmica de produtos ativos com asset_path.
  */
 
 export const prerender = false;
@@ -10,7 +11,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { getUserFromRequest } from '../../../lib/auth';
 import { createAdminClient } from '../../../lib/supabase/admin';
-import { buildAssetList, checkAssetExistence } from '../../../lib/assets';
+import { getProductAssets, checkAssetExistence } from '../../../lib/assets';
 import { jsonOk, jsonError } from '../../../lib/http';
 
 export const GET: APIRoute = async ({ request }) => {
@@ -47,10 +48,8 @@ export const GET: APIRoute = async ({ request }) => {
     return jsonError({ error: 'Acesso não autorizado.' }, 403);
   }
 
-  const [assets, existence] = await Promise.all([
-    Promise.resolve(buildAssetList()),
-    checkAssetExistence(admin),
-  ]);
+  const assets = await getProductAssets(admin);
+  const existence = await checkAssetExistence(admin, assets);
 
   return jsonOk({ orderId: order.id, assets, existence });
 };

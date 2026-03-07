@@ -1,31 +1,9 @@
 ---
-/**
- * app/acesso.astro — Página de entrega digital do produto.
- *
- * TODO: Implemente a área de entrega do seu produto aqui.
- *
- * Esta página é equivalente ao kit.astro do quarto-de-bebe-astro.
- * O que mostrar aqui depende do formato do seu produto:
- *
- * ── PDFs / Arquivos ────────────────────────────────────────────────────────
- *   - Use /api/assets/list para listar os arquivos do cliente
- *   - Use /api/assets/sign para gerar URLs assinadas temporárias
- *   - Use /api/watermark/generate + /api/watermark/sign para PDFs com marca d'água
- *
- * ── Vídeos / Cursos ────────────────────────────────────────────────────────
- *   - Armazene vídeos em Supabase Storage (bucket protected-assets)
- *   - Gere signed URLs com TTL curto para streaming
- *
- * ── Acesso externo (plataforma de cursos, Discord, etc.) ──────────────────
- *   - Redirecione para o recurso externo após verificar o entitlement
- *   - Confirme que o cliente tem entitlement ativo antes de dar o link
- *
- * Exemplo de referência: quarto-de-bebe-astro/src/pages/app/kit.astro
- */
-
 export const prerender = false;
 
+import AppLayout from '../../layouts/AppLayout.astro';
 import { createAdminClient } from '../../lib/supabase/admin';
+import { getProductAssets } from '../../lib/assets';
 import { PRODUCT } from '../../config/product';
 
 const user  = Astro.locals.user!;
@@ -43,31 +21,284 @@ const { data: entitlement } = await admin
 if (!entitlement?.active) {
   return Astro.redirect('/app');
 }
+
+// Busca todos os produtos ativos com arquivo
+const assets = await getProductAssets(admin);
+
+function typeBadge(type: string): { label: string; color: string; bg: string; border: string } {
+  switch (type) {
+    case 'main':       return { label: 'Principal',  color: '#6B9BD1', bg: 'rgba(107,155,209,0.12)', border: 'rgba(107,155,209,0.3)' };
+    case 'order_bump': return { label: 'Bonus',      color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' };
+    case 'brinde':     return { label: 'Brinde',     color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)' };
+    default:           return { label: type,          color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)' };
+  }
+}
 ---
 
-<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meu Produto</title>
-  </head>
-  <body style="margin:0;min-height:100vh;background:#1c2a3a;color:#f8fafc;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:2rem;">
-    <div style="max-width:560px;text-align:center;">
-      <h1 style="font-size:1.75rem;font-weight:700;margin-bottom:0.5rem;">Seu acesso está ativo ✓</h1>
-      <p style="color:#94a3b8;margin-bottom:2rem;">{user.email}</p>
-      <p style="color:#64748b;font-size:0.875rem;margin-bottom:2rem;">
-        Implemente a entrega do produto em
-        <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">src/pages/app/acesso.astro</code>.
-      </p>
-      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
-        <a href="/app" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;text-decoration:none;border-radius:8px;font-size:0.875rem;">
-          ← Voltar
-        </a>
-        <a href="/app/conta" style="padding:10px 20px;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;text-decoration:none;border-radius:8px;font-size:0.875rem;">
-          Minha conta
-        </a>
-      </div>
+<AppLayout title="Downloads" email={user.email!}>
+  <!-- Page header -->
+  <div class="page-header">
+    <h1 class="page-title">Downloads</h1>
+    <p class="page-subtitle">Seu conteúdo está disponível abaixo</p>
+  </div>
+
+  <div class="access-banner">
+    <span class="access-check">&#10003;</span>
+    <span>Acesso ativo — você pode baixar quantas vezes quiser</span>
+  </div>
+
+  {assets.length === 0 && (
+    <div class="empty-state">
+      <p>Nenhum arquivo disponível no momento.</p>
+      <p class="empty-sub">Os arquivos serão disponibilizados em breve.</p>
     </div>
-  </body>
-</html>
+  )}
+
+  <!-- Product cards -->
+  <div class="products-grid">
+    {assets.map((asset, i) => {
+      const badge = typeBadge(asset.type);
+      const ext = asset.assetPath.split('.').pop()?.toUpperCase() ?? 'PDF';
+      return (
+        <div class="card product-card" style={`--delay: ${i}`} data-asset-path={asset.assetPath} data-product-name={asset.name}>
+          {asset.coverPath && (
+            <img src={asset.coverPath} alt={asset.name} class="product-cover" loading="lazy" />
+          )}
+          <div class="product-badge">
+            <span class="badge-tag" style={`background:${badge.bg};border-color:${badge.border};color:${badge.color};`}>
+              {badge.label}
+            </span>
+            <span class="badge-ext">{ext}</span>
+          </div>
+          <h2 class="product-name">{asset.name}</h2>
+
+          <div class="download-section">
+            <button class="btn-primary download-btn" type="button" data-asset={asset.assetPath}>
+              Baixar {ext}
+            </button>
+            <p class="msg download-msg"></p>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+
+  <!-- Back link -->
+  <div class="back-row">
+    <a href="/app" class="back-link">&larr; Voltar ao painel</a>
+  </div>
+</AppLayout>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>('.download-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const assetPath = btn.dataset.asset;
+      if (!assetPath) return;
+
+      const msgEl = btn.parentElement?.querySelector('.download-msg') as HTMLElement | null;
+      const origLabel = btn.textContent ?? 'Baixar';
+
+      btn.disabled = true;
+      btn.textContent = 'Preparando...';
+      if (msgEl) { msgEl.textContent = ''; msgEl.className = 'msg download-msg'; }
+
+      try {
+        // Try watermark flow first (for PDFs)
+        if (assetPath.endsWith('.pdf')) {
+          const genRes = await fetch('/api/watermark/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset_key: assetPath }),
+          });
+
+          if (genRes.ok) {
+            const { watermark_key } = await genRes.json() as { watermark_key: string };
+            const signRes = await fetch(`/api/watermark/sign?key=${encodeURIComponent(watermark_key)}`);
+            if (signRes.ok) {
+              const { url } = await signRes.json() as { url: string };
+              window.open(url, '_blank');
+              if (msgEl) { msgEl.textContent = 'Download iniciado!'; msgEl.className = 'msg download-msg ok'; }
+              return;
+            }
+          }
+        }
+
+        // Fallback: direct signed URL (for non-PDF or if watermark fails)
+        const signRes = await fetch('/api/assets/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assetKey: assetPath, action: 'download' }),
+        });
+
+        if (!signRes.ok) throw new Error('Falha ao gerar link');
+        const { url, notFound } = await signRes.json() as { url: string | null; notFound?: boolean };
+
+        if (notFound || !url) {
+          if (msgEl) { msgEl.textContent = 'Arquivo ainda não disponível.'; msgEl.className = 'msg download-msg err'; }
+          return;
+        }
+
+        window.open(url, '_blank');
+        if (msgEl) { msgEl.textContent = 'Download iniciado!'; msgEl.className = 'msg download-msg ok'; }
+      } catch {
+        if (msgEl) { msgEl.textContent = 'Erro ao baixar. Tente novamente.'; msgEl.className = 'msg download-msg err'; }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+      }
+    });
+  });
+</script>
+
+<style>
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* -- Page header -- */
+  .page-header { margin-bottom: 1rem; }
+  .page-title {
+    font-family: 'Lora', Georgia, serif;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 600;
+    color: #f8fafc;
+    margin-bottom: 0.25rem;
+  }
+  .page-subtitle { font-size: 0.875rem; color: #9ca3af; }
+
+  /* -- Access banner -- */
+  .access-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    background: rgba(34,197,94,0.08);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: #22c55e;
+    margin-bottom: 1.75rem;
+  }
+  .access-check { font-size: 0.9rem; font-weight: 700; flex-shrink: 0; }
+
+  /* -- Products grid -- */
+  .products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* -- Card -- */
+  .card {
+    background: rgba(17,24,39,0.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    padding: 1.5rem;
+    transition: border-color 0.2s;
+    animation: fadeInUp 0.4s ease both;
+    animation-delay: calc(var(--delay, 0) * 80ms);
+  }
+  .card:hover { border-color: rgba(99,102,241,0.25); }
+
+  /* -- Product card -- */
+  .product-card { display: flex; flex-direction: column; gap: 1rem; }
+
+  .product-cover {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .product-badge { display: flex; align-items: center; gap: 0.5rem; }
+
+  .badge-tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.65rem;
+    border: 1px solid;
+  }
+
+  .badge-ext {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: rgba(255,255,255,0.05);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+  }
+
+  .product-name {
+    font-family: 'Lora', Georgia, serif;
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    font-weight: 600;
+    color: #f8fafc;
+    margin: 0;
+  }
+
+  /* -- Download section -- */
+  .download-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .btn-primary:hover:not(:disabled) { background: #4f46e5; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .msg { font-size: 0.8rem; min-height: 1rem; color: #9ca3af; }
+  .msg.ok  { color: #22c55e; }
+  .msg.err { color: #ef4444; }
+
+  /* -- Empty state -- */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #9ca3af;
+    font-size: 0.95rem;
+  }
+  .empty-sub { font-size: 0.82rem; color: #6b7280; margin-top: 0.35rem; }
+
+  /* -- Back link -- */
+  .back-row { margin-top: 0.5rem; }
+  .back-link {
+    font-size: 0.875rem;
+    color: #9ca3af;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .back-link:hover { color: #f8fafc; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+  }
+</style>
